@@ -13,6 +13,7 @@ import MistakeNotebook from './components/MistakeNotebook';
 import FirstBootModal from './components/FirstBootModal';
 import AdminPanel from './components/AdminPanel';
 import Leaderboard from './components/Leaderboard';
+import SettingsModal from './components/SettingsModal';
 
 import { selectRandomQuestions, evaluateExam } from './utils/quizEngine';
 import { 
@@ -86,6 +87,30 @@ export default function App() {
 
   // Current student profile
   const [currentStudent, setCurrentStudent] = useState(getSavedStudentProfile);
+
+  // Settings & Mindful Privacy Mode
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [hideLeaderboard, setHideLeaderboard] = useState(() => {
+    return localStorage.getItem('diploma_hide_leaderboard') === 'true';
+  });
+  const [isLeaderboardOptedOut, setIsLeaderboardOptedOut] = useState(() => {
+    return localStorage.getItem('diploma_leaderboard_opt_out') === 'true';
+  });
+
+  const handleUpdateSettings = ({ name, hideLeaderboard: hideL, isLeaderboardOptedOut: optOut }) => {
+    if (name) {
+      localStorage.setItem('diploma_student_name', name);
+      setCurrentStudent(prev => ({ ...(prev || {}), name }));
+    }
+    localStorage.setItem('diploma_hide_leaderboard', hideL ? 'true' : 'false');
+    localStorage.setItem('diploma_leaderboard_opt_out', optOut ? 'true' : 'false');
+    setHideLeaderboard(hideL);
+    setIsLeaderboardOptedOut(optOut);
+
+    if (hideL && currentView === 'leaderboard') {
+      setCurrentView('home');
+    }
+  };
 
   // Background silent location resolution
   useEffect(() => {
@@ -321,6 +346,8 @@ export default function App() {
         }}
         onOpenExamConfig={handleOpenExamConfig}
         onSelectUnitInReading={handleSelectUnitInReading}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        hideLeaderboard={hideLeaderboard}
         mistakeCount={mistakes.length}
         isOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
@@ -333,6 +360,7 @@ export default function App() {
           currentView={currentView}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           onOpenExamConfig={handleOpenExamConfig}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           activeExamTitle={activeExamTitle}
           mistakeCount={mistakes.length}
           theme={theme}
@@ -352,6 +380,7 @@ export default function App() {
                 setCurrentView(view);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
+              hideLeaderboard={hideLeaderboard}
               mistakeCount={mistakes.length}
               history={history}
             />
@@ -414,6 +443,8 @@ export default function App() {
             <Leaderboard
               currentStudentName={localStorage.getItem('diploma_student_name') || currentStudent?.name}
               onLaunchExam={() => handleLaunchPreset('70_marks')}
+              isOptedOut={isLeaderboardOptedOut}
+              onOpenSettings={() => setIsSettingsOpen(true)}
             />
           )}
 
@@ -454,6 +485,16 @@ export default function App() {
         isOpen={isSetupOpen}
         onClose={() => setIsSetupOpen(false)}
         onStartExam={handleStartExam}
+      />
+
+      {/* Mindful Study & Privacy Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        currentStudentName={localStorage.getItem('diploma_student_name') || currentStudent?.name}
+        hideLeaderboard={hideLeaderboard}
+        isLeaderboardOptedOut={isLeaderboardOptedOut}
+        onUpdateSettings={handleUpdateSettings}
       />
     </div>
   );

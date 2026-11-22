@@ -10,7 +10,10 @@ import {
   User, 
   Search,
   ArrowUpRight,
-  Sparkles
+  Sparkles,
+  Settings,
+  EyeOff,
+  HeartHandshake
 } from 'lucide-react';
 import { getAllStudentSessions } from '../utils/sessionService';
 
@@ -72,7 +75,12 @@ const INITIAL_PEER_SCHOLARS = [
   }
 ];
 
-export default function Leaderboard({ currentStudentName, onLaunchExam }) {
+export default function Leaderboard({ 
+  currentStudentName, 
+  onLaunchExam, 
+  isOptedOut = false,
+  onOpenSettings 
+}) {
   const [sessions, setSessions] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -87,17 +95,20 @@ export default function Leaderboard({ currentStudentName, onLaunchExam }) {
   // Compute live ranking table combining peer scholars and actual student sessions
   const rankings = useMemo(() => {
     const studentStats = new Map();
+    const currKey = currentStudentName ? currentStudentName.toLowerCase().trim() : '';
 
     // 1. Seed with peer scholars
     INITIAL_PEER_SCHOLARS.forEach(p => {
-      studentStats.set(p.name.toLowerCase().trim(), {
+      const pKey = p.name.toLowerCase().trim();
+      const isCurr = !isOptedOut && currKey && pKey === currKey;
+      studentStats.set(pKey, {
         name: p.name,
         questionsSolved: p.questionsSolved,
         marksObtained: p.marksObtained,
         accuracy: p.accuracy,
         examsCount: p.examsCount,
         college: p.college,
-        isCurrentUser: currentStudentName && p.name.toLowerCase().trim() === currentStudentName.toLowerCase().trim()
+        isCurrentUser: isCurr
       });
     });
 
@@ -105,6 +116,12 @@ export default function Leaderboard({ currentStudentName, onLaunchExam }) {
     sessions.forEach(s => {
       const name = s.studentName ? s.studentName.trim() : 'Anonymous';
       const key = name.toLowerCase();
+
+      // If current student has opted out, exclude their sessions from public leaderboard
+      if (isOptedOut && currKey && key === currKey) {
+        return;
+      }
+
       const existing = studentStats.get(key) || {
         name,
         questionsSolved: 0,
@@ -112,7 +129,7 @@ export default function Leaderboard({ currentStudentName, onLaunchExam }) {
         accuracy: 0,
         examsCount: 0,
         college: s.college || 'Polytechnic Student',
-        isCurrentUser: currentStudentName && name.toLowerCase() === currentStudentName.toLowerCase().trim()
+        isCurrentUser: !isOptedOut && currKey && key === currKey
       };
 
       existing.questionsSolved += (s.totalQuestions || 0);
@@ -125,9 +142,9 @@ export default function Leaderboard({ currentStudentName, onLaunchExam }) {
       studentStats.set(key, existing);
     });
 
-    // 3. Ensure current student is listed if not already
-    if (currentStudentName && !studentStats.has(currentStudentName.toLowerCase().trim())) {
-      studentStats.set(currentStudentName.toLowerCase().trim(), {
+    // 3. Ensure current student is listed if not opted out
+    if (!isOptedOut && currKey && !studentStats.has(currKey)) {
+      studentStats.set(currKey, {
         name: currentStudentName,
         questionsSolved: 0,
         marksObtained: 0,
@@ -136,6 +153,11 @@ export default function Leaderboard({ currentStudentName, onLaunchExam }) {
         college: "Your Institution",
         isCurrentUser: true
       });
+    }
+
+    // If opted out, ensure current student is completely removed if seed matched
+    if (isOptedOut && currKey) {
+      studentStats.delete(currKey);
     }
 
     // 4. Sort by Questions Solved desc, then Marks Obtained desc
@@ -150,7 +172,7 @@ export default function Leaderboard({ currentStudentName, onLaunchExam }) {
       ...item,
       rank: idx + 1
     }));
-  }, [sessions, currentStudentName]);
+  }, [sessions, currentStudentName, isOptedOut]);
 
   const filteredRankings = useMemo(() => {
     if (!searchQuery.trim()) return rankings;
@@ -182,18 +204,58 @@ export default function Leaderboard({ currentStudentName, onLaunchExam }) {
             </p>
           </div>
 
-          {onLaunchExam && (
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {onOpenSettings && (
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className="rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#202020] px-3 py-2 text-xs sm:text-sm font-semibold text-zinc-700 dark:text-[#9B9A97] hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-[#282828] transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Leaderboard & Privacy Settings"
+              >
+                <Settings className="h-4 w-4" />
+                <span>Opt-out / Settings</span>
+              </button>
+            )}
+
+            {onLaunchExam && (
+              <button
+                type="button"
+                onClick={onLaunchExam}
+                className="rounded-sm border border-zinc-900 dark:border-white/60 bg-zinc-900 dark:bg-white px-4 py-2 text-xs sm:text-sm font-bold text-white dark:text-[#191919] hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors flex items-center gap-2 cursor-pointer shrink-0"
+              >
+                <Zap className="h-4 w-4 text-amber-400 fill-current" />
+                <span>Solve Questions to Rank Up</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Mindful Private Study Mode Notice (If student opted out of comparison) */}
+      {isOptedOut && (
+        <div className="rounded-md border border-emerald-800/50 dark:border-white/50 bg-emerald-500/10 dark:bg-[#24332C]/60 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <HeartHandshake className="h-5 w-5 text-emerald-600 dark:text-[#85B59A] shrink-0" />
+            <div>
+              <div className="text-sm font-bold text-zinc-900 dark:text-white">
+                Private Study Mode Active
+              </div>
+              <div className="text-xs text-zinc-600 dark:text-[#9B9A97]">
+                Your name and scores are completely hidden from this leaderboard. You are preparing quietly at your own pace without peer pressure.
+              </div>
+            </div>
+          </div>
+          {onOpenSettings && (
             <button
               type="button"
-              onClick={onLaunchExam}
-              className="rounded-sm border border-zinc-900 dark:border-white/60 bg-zinc-900 dark:bg-white px-4 py-2 text-xs sm:text-sm font-bold text-white dark:text-[#191919] hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors flex items-center gap-2 cursor-pointer shrink-0"
+              onClick={onOpenSettings}
+              className="text-xs font-semibold text-emerald-700 dark:text-[#85B59A] hover:underline cursor-pointer shrink-0"
             >
-              <Zap className="h-4 w-4 text-amber-400 fill-current" />
-              <span>Solve Questions to Rank Up</span>
+              Adjust in Settings →
             </button>
           )}
         </div>
-      </div>
+      )}
 
       {/* Current Student's Rank Card (if registered) */}
       {currentUserRank && (

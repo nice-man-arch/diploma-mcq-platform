@@ -27,6 +27,7 @@ export default function Dashboard({
   onLaunchPreset,
   onOpenCustomModal,
   onNavigate,
+  hideLeaderboard = false,
   mistakeCount = 0,
   history = []
 }) {
@@ -201,34 +202,36 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* Competitive Leaderboard Spotlight Banner */}
-      <div 
-        onClick={() => onNavigate('leaderboard')}
-        className="rounded-md border border-amber-800/80 dark:border-white/45 bg-amber-500/5 dark:bg-[#202020] p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:border-amber-600 dark:hover:border-white transition-all cursor-pointer group"
-      >
-        <div className="flex items-start sm:items-center gap-4">
-          <div className="h-11 w-11 rounded-sm bg-amber-500/10 dark:bg-[#362D1F] border border-amber-600/30 dark:border-white/30 flex items-center justify-center shrink-0 text-amber-600 dark:text-[#D1B280]">
-            <Trophy className="h-6 w-6" />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-base sm:text-lg text-zinc-900 dark:text-[#E3E3E3]">
-                State-Wide Scholar Leaderboard
-              </span>
-              <span className="rounded-sm border border-amber-800/40 dark:border-white/45 bg-amber-100 dark:bg-[#362D1F] px-2 py-0.5 text-xs font-semibold text-amber-800 dark:text-[#D1B280]">
-                Live Standings
-              </span>
+      {/* Competitive Leaderboard Spotlight Banner (Hidden if student prefers self-paced quiet study) */}
+      {!hideLeaderboard && (
+        <div 
+          onClick={() => onNavigate('leaderboard')}
+          className="rounded-md border border-amber-800/80 dark:border-white/45 bg-amber-500/5 dark:bg-[#202020] p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:border-amber-600 dark:hover:border-white transition-all cursor-pointer group"
+        >
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="h-11 w-11 rounded-sm bg-amber-500/10 dark:bg-[#362D1F] border border-amber-600/30 dark:border-white/30 flex items-center justify-center shrink-0 text-amber-600 dark:text-[#D1B280]">
+              <Trophy className="h-6 w-6" />
             </div>
-            <p className="text-sm text-zinc-600 dark:text-[#9B9A97]">
-              Current Leader: <strong className="text-zinc-900 dark:text-white">Aarav Sharma</strong> (298 Qs Solved, 94% Accuracy). Complete an exam to claim your rank!
-            </p>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-base sm:text-lg text-zinc-900 dark:text-[#E3E3E3]">
+                  State-Wide Scholar Leaderboard
+                </span>
+                <span className="rounded-sm border border-amber-800/40 dark:border-white/45 bg-amber-100 dark:bg-[#362D1F] px-2 py-0.5 text-xs font-semibold text-amber-800 dark:text-[#D1B280]">
+                  Live Standings
+                </span>
+              </div>
+              <p className="text-sm text-zinc-600 dark:text-[#9B9A97]">
+                Current Leader: <strong className="text-zinc-900 dark:text-white">Aarav Sharma</strong> (298 Qs Solved, 94% Accuracy). Complete an exam to claim your rank!
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-sm font-bold text-amber-700 dark:text-[#D1B280] group-hover:translate-x-1 transition-transform shrink-0">
+            <span>View Rankings</span>
+            <ArrowRight className="h-4 w-4" />
           </div>
         </div>
-        <div className="flex items-center gap-1.5 text-sm font-bold text-amber-700 dark:text-[#D1B280] group-hover:translate-x-1 transition-transform shrink-0">
-          <span>View Rankings</span>
-          <ArrowRight className="h-4 w-4" />
-        </div>
-      </div>
+      )}
 
       {/* Syllabus Units Table */}
       <div className="space-y-4">
