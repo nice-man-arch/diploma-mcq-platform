@@ -25,8 +25,7 @@ export default function Navbar({
     reading: 'Reading Mode',
     instant: 'Instant Step-by-Step Practice',
     mistakes: 'Mistake Notebook',
-    leaderboard: 'Scholars Leaderboard',
-    admin: 'Dashboard'
+    leaderboard: 'Scholars Leaderboard'
   };
 
   return (

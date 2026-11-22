@@ -30,81 +30,8 @@ export default function Dashboard({
   onNavigate,
   hideLeaderboard = false,
   mistakeCount = 0,
-  history = [],
-  onAdminUnlock
+  history = []
 }) {
-  const [commandQuery, setCommandQuery] = useState('');
-  const inputRef = useRef(null);
-
-  const triggerAdminUnlock = () => {
-    if (onAdminUnlock) {
-      onAdminUnlock();
-    }
-  };
-
-  const handleCommandChange = (e) => {
-    setCommandQuery(e.target.value);
-  };
-
-  const handleCommandSubmit = (e) => {
-    if (e) e.preventDefault();
-    const cleaned = commandQuery.trim().toLowerCase();
-    if (cleaned === '/test01' || cleaned === 'test01') {
-      triggerAdminUnlock();
-    }
-  };
-
-  // Auto-focus the invisible input and support direct keystroke entry
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-
-    let keyBuffer = '';
-    let clearTimer = null;
-
-    const handleKeyDown = (e) => {
-      // Don't intercept if user is typing in another regular input
-      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName) && e.target !== inputRef.current) {
-        return;
-      }
-
-      if (e.key === 'Enter') {
-        const cleaned = keyBuffer.trim().toLowerCase();
-        const inputCleaned = (inputRef.current?.value || '').trim().toLowerCase();
-        if (cleaned.endsWith('/test01') || cleaned.endsWith('test01') || inputCleaned === '/test01' || inputCleaned === 'test01') {
-          triggerAdminUnlock();
-          keyBuffer = '';
-          if (inputRef.current) inputRef.current.value = '';
-        }
-        return;
-      }
-
-      if (e.key === 'Backspace') {
-        keyBuffer = keyBuffer.slice(0, -1);
-        return;
-      }
-
-      if (e.key && e.key.length === 1) {
-        keyBuffer += e.key;
-        if (keyBuffer.length > 20) {
-          keyBuffer = keyBuffer.slice(-20);
-        }
-
-        clearTimeout(clearTimer);
-        clearTimer = setTimeout(() => {
-          keyBuffer = '';
-        }, 10000);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      clearTimeout(clearTimer);
-    };
-  }, []);
-
   return (
     <div className="max-w-5xl mx-auto py-8 space-y-12 text-zinc-900 dark:text-[#E3E3E3]">
       {/* Document Heading */}
@@ -126,19 +53,6 @@ export default function Dashboard({
         <p className="text-base sm:text-lg text-zinc-600 dark:text-[#9B9A97] leading-relaxed max-w-3xl">
           A minimalist high-retention mastery workspace for Diploma engineering students. Practice non-repeating randomized exam sets, review instant answers with memory hacks, and drill weak concepts in your mistake notebook.
         </p>
-
-        {/* Off-screen input with pointer-events-none: 100% unclickable by mouse/touch */}
-        <input
-          ref={inputRef}
-          type="text"
-          value={commandQuery}
-          onChange={handleCommandChange}
-          aria-hidden="true"
-          tabIndex={-1}
-          className="fixed -top-[9999px] -left-[9999px] w-0 h-0 opacity-0 pointer-events-none border-0 p-0 m-0 outline-none select-none"
-          autoComplete="off"
-          spellCheck="false"
-        />
 
         {/* Quick Launch Buttons */}
         <div className="pt-3 flex flex-wrap items-center gap-3">

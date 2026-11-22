@@ -11,7 +11,6 @@ import ReadingMode from './components/ReadingMode';
 import InstantPractice from './components/InstantPractice';
 import MistakeNotebook from './components/MistakeNotebook';
 import FirstBootModal from './components/FirstBootModal';
-import AdminPanel from './components/AdminPanel';
 import Leaderboard from './components/Leaderboard';
 import SettingsModal from './components/SettingsModal';
 
@@ -365,10 +364,6 @@ export default function App() {
               hideLeaderboard={hideLeaderboard}
               mistakeCount={mistakes.length}
               history={history}
-              onAdminUnlock={() => {
-                sessionStorage.setItem('diploma_admin_auth', 'true');
-                setCurrentView('admin');
-              }}
             />
           )}
 
@@ -436,28 +431,6 @@ export default function App() {
                 setIsLeaderboardOptedOut(nextVal);
               }}
               onOpenSettings={() => setIsSettingsOpen(true)}
-            />
-          )}
-
-          {/* Admin Panel view - Accessible strictly via keyboard command /test01 */}
-          {currentView === 'admin' && (
-            <AdminPanel
-              onNavigateHome={() => {
-                setCurrentView('home');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              onLaunchPreset={handleLaunchPreset}
-              onOpenCustomModal={() => handleOpenExamConfig('custom')}
-              onNavigate={(view, extra) => {
-                if (extra && extra.unit !== undefined) {
-                  setReadingInitialUnit(extra.unit);
-                }
-                setCurrentView(view);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              hideLeaderboard={hideLeaderboard}
-              mistakeCount={mistakes.length}
-              history={history}
             />
           )}
         </main>
