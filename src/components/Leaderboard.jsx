@@ -53,7 +53,12 @@ export default function Leaderboard({
     window.addEventListener('diploma_student_name_updated', handleLocalUpdate);
     window.addEventListener('storage', handleLocalUpdate);
 
-    // 3. Attach Firebase Firestore real-time subscription
+    // 3. Fallback timer: if Firestore has not connected within 2.5s, signal pending setup
+    const probeTimer = setTimeout(() => {
+      setCloudSyncStatus(prev => prev === 'checking' ? 'pending_setup' : prev);
+    }, 2500);
+
+    // 4. Attach Firebase Firestore real-time subscription
     let unsubscribe = () => {};
     try {
       const q = query(
@@ -65,7 +70,11 @@ export default function Leaderboard({
       unsubscribe = onSnapshot(
         q,
         (snapshot) => {
+          clearTimeout(probeTimer);
           setCloudSyncStatus('connected');
+          // Safely sync any locally stored sessions to the newly active cloud
+          syncLocalSessionsToCloud().catch(() => {});
+
           const remoteSessions = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -81,6 +90,7 @@ export default function Leaderboard({
           setSessions(Array.from(map.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
         },
         (err) => {
+          clearTimeout(probeTimer);
           setCloudSyncStatus('pending_setup');
           console.warn('Firestore live listener notice (local mode active):', err.message);
           getAllStudentSessions().then(data => {
@@ -91,6 +101,7 @@ export default function Leaderboard({
         }
       );
     } catch (err) {
+      clearTimeout(probeTimer);
       setCloudSyncStatus('pending_setup');
       console.warn('Firestore listener setup fallback:', err.message);
       getAllStudentSessions().then(data => {
@@ -101,6 +112,7 @@ export default function Leaderboard({
     }
 
     return () => {
+      clearTimeout(probeTimer);
       window.removeEventListener('diploma_session_recorded', handleLocalUpdate);
       window.removeEventListener('diploma_student_name_updated', handleLocalUpdate);
       window.removeEventListener('storage', handleLocalUpdate);
@@ -386,14 +398,26 @@ export default function Leaderboard({
 
       {/* Cloud Sync Status Notice */}
       {cloudSyncStatus === 'pending_setup' && (
-        <div className="rounded-md border border-amber-600/50 bg-amber-50/60 dark:bg-[#261E14] p-3 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-800 dark:text-[#D1B280]">
-          <div className="flex items-center gap-2.5">
-            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+        <div className="rounded-md border-2 border-amber-600/60 bg-amber-50/80 dark:bg-[#261E14] p-4 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 dark:text-[#D1B280] shadow-xs">
+          <div className="flex items-center gap-3">
+            <span className="h-3 w-3 rounded-full bg-amber-500 animate-pulse shrink-0" />
             <div>
-              <span className="font-bold">Device Local Mode Active</span>: To sync exams between your phone and laptop in real-time, click <strong>"Create database"</strong> in your open Firebase Console tab (under <em>Build → Firestore Database → Start in test mode</em>).
+              <div className="font-extrabold text-sm text-amber-900 dark:text-amber-300">
+                Device Local Mode Active (Scores Stored On This Device Only)
+              </div>
+              <p className="mt-0.5 text-xs text-amber-800 dark:text-[#D1B280]">
+                To sync your mobile exams (Parth02) and desktop exams (parth01) across devices in real time, enable Cloud Firestore once in your Firebase Console.
+              </p>
             </div>
           </div>
-          <span className="text-[11px] font-mono text-zinc-500 shrink-0">Auto-merges upon creation</span>
+          <a
+            href="https://console.firebase.google.com/project/asc-diplo/firestore"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-sm border border-amber-700 dark:border-amber-400/50 bg-amber-600 dark:bg-[#D1B280] px-4 py-2 text-xs font-bold text-white dark:text-[#191919] hover:bg-amber-700 transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer shadow-xs"
+          >
+            <span>Enable Cloud Sync →</span>
+          </a>
         </div>
       )}
 
