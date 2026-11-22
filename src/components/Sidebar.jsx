@@ -7,12 +7,9 @@ import {
   Flame, 
   Award, 
   Clock, 
-  Sliders, 
   Plus, 
   GraduationCap, 
-  PanelLeftClose,
-  ChevronRight,
-  Shield
+  PanelLeftClose
 } from 'lucide-react';
 
 const UNITS = [
@@ -143,25 +140,6 @@ export default function Sidebar({
                   {mistakeCount}
                 </span>
               )}
-            </button>
-
-            {/* Admin Panel Tab */}
-            <button
-              type="button"
-              onClick={() => onNavigate('admin')}
-              className={`w-full flex items-center justify-between rounded-sm px-3 py-2 text-sm font-semibold transition-colors cursor-pointer border ${
-                currentView === 'admin'
-                  ? 'bg-zinc-100 text-zinc-900 border-zinc-900 dark:bg-[#282828] dark:text-white dark:border-white/60'
-                  : 'text-zinc-600 dark:text-[#9B9A97] border-transparent hover:bg-zinc-50 dark:hover:bg-[#262626] hover:text-zinc-900 dark:hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Shield className="h-4 w-4 text-emerald-600 dark:text-[#85B59A]" />
-                <span>Admin & Locations</span>
-              </div>
-              <span className="rounded-xs border border-zinc-800 dark:border-white/30 bg-zinc-100 dark:bg-[#191919] px-1.5 py-0.2 text-[10px] font-mono text-zinc-500 dark:text-[#9B9A97]">
-                PORTAL
-              </span>
             </button>
           </div>
 

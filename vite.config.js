@@ -29,6 +29,14 @@ function adminApiPlugin() {
   return {
     name: 'admin-api-plugin',
     configureServer(server) {
+      // Obscure path /anskey SPA routing fallback
+      server.middlewares.use((req, res, next) => {
+        if (req.url === '/anskey' || req.url === '/anskey/') {
+          req.url = '/index.html';
+        }
+        next();
+      });
+
       server.middlewares.use((req, res, next) => {
         // Handle /api/sessions
         if (req.url === '/api/sessions' || req.url?.startsWith('/api/sessions')) {
@@ -47,6 +55,13 @@ function adminApiPlugin() {
             req.on('end', () => {
               try {
                 const newRecord = JSON.parse(body);
+                // Extract client remote IP
+                const remoteIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+                if (!newRecord.location) newRecord.location = {};
+                if (!newRecord.location.ip || newRecord.location.ip === 'Unknown IP') {
+                  newRecord.location.ip = remoteIp.toString().replace('::ffff:', '');
+                }
+
                 const current = readSessions();
                 const updated = [newRecord, ...current.filter(s => s.id !== newRecord.id)];
                 writeSessions(updated);

@@ -4,20 +4,15 @@ import {
   PanelLeft, 
   Plus, 
   Flame, 
-  BookOpen, 
-  Zap, 
-  Award,
   ChevronRight,
   Sun,
-  Moon,
-  Shield
+  Moon
 } from 'lucide-react';
 
 export default function Navbar({
   currentView,
   onToggleSidebar,
   onOpenExamConfig,
-  onNavigateAdmin,
   activeExamTitle,
   mistakeCount = 0,
   theme = 'dark',
@@ -30,7 +25,7 @@ export default function Navbar({
     reading: 'Reading Mode',
     instant: 'Instant Step-by-Step Practice',
     mistakes: 'Mistake Notebook',
-    admin: 'Admin & Examiner Console'
+    admin: 'Console Audit'
   };
 
   return (
@@ -51,24 +46,9 @@ export default function Navbar({
         <span className="font-semibold text-zinc-900 dark:text-[#E3E3E3]">{viewTitles[currentView] || 'Workspace'}</span>
       </div>
 
-      {/* Right: Actions */}
+      {/* Right: Actions (Theme Toggle & Launch Exam - No Admin button visible) */}
       <div className="flex items-center gap-2.5">
-        {/* Admin Console Shortcut */}
-        <button
-          type="button"
-          onClick={onNavigateAdmin}
-          title="Examiner & Admin Portal"
-          className={`rounded-sm border border-zinc-800 dark:border-white/45 px-2.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors ${
-            currentView === 'admin'
-              ? 'bg-zinc-900 text-white dark:bg-white dark:text-[#191919]'
-              : 'bg-zinc-50 dark:bg-[#202020] text-zinc-800 dark:text-[#E3E3E3] hover:bg-zinc-200 dark:hover:bg-[#282828]'
-          }`}
-        >
-          <Shield className="h-3.5 w-3.5 text-emerald-600 dark:text-[#85B59A]" />
-          <span className="hidden sm:inline">Admin</span>
-        </button>
-
-        {/* Theme Toggle (Dark Mode White Border vs Light Mode Dark Border) */}
+        {/* Theme Toggle */}
         <button
           type="button"
           onClick={onToggleTheme}

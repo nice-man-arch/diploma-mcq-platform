@@ -10,7 +10,7 @@ import ScorecardView from './components/ScorecardView';
 import ReadingMode from './components/ReadingMode';
 import InstantPractice from './components/InstantPractice';
 import MistakeNotebook from './components/MistakeNotebook';
-import StudentIdentificationModal from './components/StudentIdentificationModal';
+import FirstBootModal from './components/FirstBootModal';
 import AdminPanel from './components/AdminPanel';
 
 import { selectRandomQuestions, evaluateExam } from './utils/quizEngine';
@@ -29,10 +29,23 @@ import {
   saveStudentProfile, 
   recordStudentSession 
 } from './utils/sessionService';
+import { detectStudentLocation } from './utils/locationService';
+
+// Helper to detect secret admin route in URL
+const isSecretAdminRoute = () => {
+  const p = window.location.pathname.toLowerCase();
+  const h = window.location.hash.toLowerCase();
+  const s = window.location.search.toLowerCase();
+  return p.includes('anskey') || h.includes('anskey') || s.includes('anskey');
+};
 
 export default function App() {
-  const [currentView, setCurrentView] = useState('home');
+  const [currentView, setCurrentView] = useState(() => {
+    return isSecretAdminRoute() ? 'admin' : 'home';
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Theme setup
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('diploma_theme') || 'dark';
   });
@@ -50,15 +63,50 @@ export default function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
+  // Listen for obscure URL navigation (e.g. /anskey or #/anskey)
+  useEffect(() => {
+    const handleUrlChange = () => {
+      if (isSecretAdminRoute()) {
+        setCurrentView('admin');
+      }
+    };
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
+
+  // First boot check: Prompt for student name ONLY on the very first visit
+  const [isFirstBoot, setIsFirstBoot] = useState(() => {
+    return !localStorage.getItem('diploma_student_name');
+  });
+
+  // Current student profile
+  const [currentStudent, setCurrentStudent] = useState(getSavedStudentProfile);
+
+  // Background silent location resolution
+  useEffect(() => {
+    if (!currentStudent?.location?.ip || currentStudent?.location?.ip === 'Unknown IP') {
+      detectStudentLocation().then(loc => {
+        if (loc) {
+          const updated = {
+            ...(currentStudent || {}),
+            name: localStorage.getItem('diploma_student_name') || currentStudent?.name || 'Candidate',
+            location: loc
+          };
+          setCurrentStudent(updated);
+          saveStudentProfile(updated);
+        }
+      });
+    }
+  }, []);
+
   // Local storage state
   const [mistakes, setMistakes] = useState(getMistakes);
   const [bookmarks, setBookmarks] = useState(getBookmarks);
   const [history, setHistory] = useState(getQuizHistory);
-
-  // Student Profile & Verification Modal
-  const [currentStudent, setCurrentStudent] = useState(getSavedStudentProfile);
-  const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
-  const [pendingExamConfig, setPendingExamConfig] = useState(null);
 
   // Setup Modal
   const [isSetupOpen, setIsSetupOpen] = useState(false);
@@ -114,20 +162,8 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Initiate Start Exam (with Student Verification check)
-  const handleStartExam = (config) => {
-    // If student identity is not verified or if user wants to confirm candidate name, prompt modal
-    if (!currentStudent || !currentStudent.name) {
-      setPendingExamConfig(config);
-      setIsStudentModalOpen(true);
-      return;
-    }
-
-    executeStartExam(config);
-  };
-
-  // Internal execution of starting exam after student verification
-  const executeStartExam = ({
+  // Start Exam directly (Instant 1-click launch - no modal prompts!)
+  const handleStartExam = ({
     totalCount = 70,
     markPerQuestion = 1.0,
     difficulty = 'all',
@@ -161,15 +197,6 @@ export default function App() {
     setSidebarOpen(false);
     setCurrentView('exam');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleConfirmStudent = (studentProfile) => {
-    setCurrentStudent(studentProfile);
-    setIsStudentModalOpen(false);
-    if (pendingExamConfig) {
-      executeStartExam(pendingExamConfig);
-      setPendingExamConfig(null);
-    }
   };
 
   // Preset launch from dashboard
@@ -226,7 +253,7 @@ export default function App() {
     });
   };
 
-  // Complete exam
+  // Complete exam & silently record student session with IP address in background
   const handleCompleteExam = (examPayload) => {
     const userAnswers = examPayload?.userAnswers || examPayload || {};
     const timeTakenSeconds = examPayload?.timeTakenSeconds || 0;
@@ -256,12 +283,13 @@ export default function App() {
     });
     setHistory(getQuizHistory());
 
-    // Record to Central Admin Sessions with Student Name & Geolocation
+    // Silently capture student name and IP location into Central Admin Sessions
+    const studentName = localStorage.getItem('diploma_student_name') || currentStudent?.name || 'Candidate';
     recordStudentSession({
-      studentName: currentStudent?.name || 'Anonymous Student',
+      studentName,
       studentId: currentStudent?.rollNo || '',
       college: currentStudent?.college || '',
-      location: currentStudent?.location || { city: 'Local Area', country: 'India' },
+      location: currentStudent?.location || { city: 'Local Area', country: 'India', source: 'ip' },
       examTitle: activeExamTitle,
       totalQuestions: evalResult.totalQuestions,
       markPerQuestion: activeMarkPerQuestion,
@@ -282,7 +310,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#FBFBFA] dark:bg-[#191919] text-zinc-900 dark:text-[#E3E3E3] flex antialiased transition-colors duration-150">
-      {/* Notion Collapsible Sidebar */}
+      {/* Notion Collapsible Sidebar - No Admin buttons visible */}
       <Sidebar
         currentView={currentView}
         onNavigate={(view) => {
@@ -299,23 +327,18 @@ export default function App() {
 
       {/* Main Content Viewport */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
-        {/* Minimal Notion Navbar */}
+        {/* Minimal Notion Navbar - No Admin button visible */}
         <Navbar
           currentView={currentView}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           onOpenExamConfig={handleOpenExamConfig}
-          onNavigateAdmin={() => {
-            setCurrentView('admin');
-            setSidebarOpen(false);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
           activeExamTitle={activeExamTitle}
           mistakeCount={mistakes.length}
           theme={theme}
           onToggleTheme={handleToggleTheme}
         />
 
-        {/* Workspace Canvas with Generous Padding */}
+        {/* Workspace Canvas */}
         <main className="flex-1 px-4 sm:px-8 py-8 overflow-y-auto">
           {currentView === 'home' && (
             <Dashboard
@@ -385,9 +408,14 @@ export default function App() {
             />
           )}
 
+          {/* Admin Panel view - Accessible ONLY via obscure route /anskey */}
           {currentView === 'admin' && (
             <AdminPanel
               onNavigateHome={() => {
+                window.location.hash = '';
+                if (window.history.pushState) {
+                  window.history.pushState({}, '', '/');
+                }
                 setCurrentView('home');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
@@ -403,15 +431,13 @@ export default function App() {
         </footer>
       </div>
 
-      {/* Candidate Verification & Location Detection Modal */}
-      <StudentIdentificationModal
-        isOpen={isStudentModalOpen}
-        onClose={() => {
-          setIsStudentModalOpen(false);
-          setPendingExamConfig(null);
+      {/* First-Boot Welcome Name Dialog (Shown ONLY once on first visit) */}
+      <FirstBootModal
+        isOpen={isFirstBoot}
+        onComplete={(profile) => {
+          setCurrentStudent(profile);
+          setIsFirstBoot(false);
         }}
-        onConfirmStudent={handleConfirmStudent}
-        examTitle={pendingExamConfig?.title || 'Diploma Science Examination'}
       />
 
       {/* Global Exam Configuration Modal */}
