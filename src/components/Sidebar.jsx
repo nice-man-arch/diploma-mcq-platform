@@ -10,8 +10,7 @@ import {
   Plus, 
   GraduationCap, 
   PanelLeftClose,
-  Trophy,
-  Settings
+  Trophy
 } from 'lucide-react';
 
 const UNITS = [
@@ -28,7 +27,6 @@ export default function Sidebar({
   onNavigate,
   onOpenExamConfig,
   onSelectUnitInReading,
-  onOpenSettings,
   hideLeaderboard = false,
   mistakeCount = 0,
   isOpen,
@@ -231,16 +229,7 @@ export default function Sidebar({
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-3 border-t border-zinc-800 dark:border-white/45 space-y-2">
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="w-full rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#202020] py-2 px-3 text-xs sm:text-sm font-semibold text-zinc-700 dark:text-[#9B9A97] hover:bg-zinc-100 dark:hover:bg-[#282828] hover:text-zinc-900 dark:hover:text-white transition-colors flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Settings className="h-4 w-4" />
-            <span>Settings & Privacy</span>
-          </button>
-
+        <div className="p-3 border-t border-zinc-800 dark:border-white/45">
           <button
             type="button"
             onClick={() => onOpenExamConfig('70_marks')}

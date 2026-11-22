@@ -346,7 +346,6 @@ export default function App() {
         }}
         onOpenExamConfig={handleOpenExamConfig}
         onSelectUnitInReading={handleSelectUnitInReading}
-        onOpenSettings={() => setIsSettingsOpen(true)}
         hideLeaderboard={hideLeaderboard}
         mistakeCount={mistakes.length}
         isOpen={sidebarOpen}
