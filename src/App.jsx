@@ -28,9 +28,9 @@ import {
 import { 
   getSavedStudentProfile, 
   saveStudentProfile, 
-  recordStudentSession 
+  recordStudentSession,
+  getOrCreateStudentId
 } from './utils/sessionService';
-import { detectStudentLocation } from './utils/locationService';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('home');
@@ -94,23 +94,6 @@ export default function App() {
       setCurrentView('home');
     }
   };
-
-  // Background silent location resolution
-  useEffect(() => {
-    if (!currentStudent?.location?.ip || currentStudent?.location?.ip === 'Unknown IP') {
-      detectStudentLocation().then(loc => {
-        if (loc) {
-          const updated = {
-            ...(currentStudent || {}),
-            name: localStorage.getItem('diploma_student_name') || currentStudent?.name || 'Candidate',
-            location: loc
-          };
-          setCurrentStudent(updated);
-          saveStudentProfile(updated);
-        }
-      });
-    }
-  }, []);
 
   // Local storage state
   const [mistakes, setMistakes] = useState(getMistakes);
@@ -294,9 +277,10 @@ export default function App() {
 
     // Record student exam session for Leaderboard ranking
     const studentName = localStorage.getItem('diploma_student_name') || currentStudent?.name || 'Candidate';
+    const studentId = localStorage.getItem('diploma_student_id') || currentStudent?.id || getOrCreateStudentId();
     recordStudentSession({
       studentName,
-      studentId: currentStudent?.rollNo || '',
+      studentId,
       college: currentStudent?.college || 'Polytechnic Student',
       examTitle: activeExamTitle,
       totalQuestions: evalResult.totalQuestions,
@@ -422,6 +406,7 @@ export default function App() {
           {currentView === 'leaderboard' && (
             <Leaderboard
               currentStudentName={localStorage.getItem('diploma_student_name') || currentStudent?.name}
+              currentStudentId={localStorage.getItem('diploma_student_id') || currentStudent?.id || getOrCreateStudentId()}
               onLaunchExam={(preset) => handleLaunchPreset(preset || '70_marks')}
               isOptedOut={isLeaderboardOptedOut}
               onToggleOptOut={() => {

@@ -21,12 +21,13 @@ import {
   CloudOff,
   CloudCheck
 } from 'lucide-react';
-import { getAllStudentSessions, getLocalSessions, syncLocalSessionsToCloud } from '../utils/sessionService';
+import { getAllStudentSessions, getLocalSessions, syncLocalSessionsToCloud, getOrCreateStudentId } from '../utils/sessionService';
 import { db } from '../utils/firebase';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 
 export default function Leaderboard({ 
   currentStudentName, 
+  currentStudentId,
   onLaunchExam, 
   isOptedOut = false,
   onToggleOptOut,
@@ -36,6 +37,7 @@ export default function Leaderboard({
   const [searchQuery, setSearchQuery] = useState('');
   const [examTab, setExamTab] = useState('all'); // 'all' | '70_marks' | '140_drill'
   const [cloudSyncStatus, setCloudSyncStatus] = useState('checking'); // 'checking' | 'connected' | 'pending_setup'
+  const resolvedStudentId = currentStudentId || getOrCreateStudentId();
 
   // Load and listen for session updates
   useEffect(() => {
@@ -112,21 +114,30 @@ export default function Leaderboard({
   // Compute live ranking table strictly from actual student exam sessions
   const allStudentStats = useMemo(() => {
     const studentStats = new Map();
-    const currKey = currentStudentName ? currentStudentName.toLowerCase().trim() : '';
+    const currId = resolvedStudentId;
+    const currNameKey = currentStudentName ? currentStudentName.toLowerCase().trim() : '';
 
     sessions.forEach(s => {
       const name = s.studentName ? s.studentName.trim() : 'Scholar';
-      const key = name.toLowerCase();
+      // Identify each student by studentId to allow multiple people to share the exact same name
+      const studentKey = s.studentId || (s.id ? `sess_${s.id}` : `sess_${name}_${s.timestamp}`);
+      
+      const isCurrentUser = !isOptedOut && (
+        (currId && s.studentId && s.studentId === currId) ||
+        (!s.studentId && currNameKey && name.toLowerCase() === currNameKey)
+      );
 
       // If current student has opted out, exclude their sessions from public leaderboard
-      if (isOptedOut && currKey && key === currKey) {
+      if (isOptedOut && isCurrentUser) {
         return;
       }
 
-      const existing = studentStats.get(key) || {
+      const existing = studentStats.get(studentKey) || {
+        id: studentKey,
+        studentId: s.studentId || studentKey,
         name,
         college: s.college || 'Polytechnic Student',
-        isCurrentUser: !isOptedOut && currKey && key === currKey,
+        isCurrentUser: false,
         totalQuestionsAttempted: 0,
         totalQuestionsSolved: 0,
         totalMarksObtained: 0,
@@ -149,6 +160,10 @@ export default function Leaderboard({
         // Recent session
         lastSession: null
       };
+
+      if (isCurrentUser) {
+        existing.isCurrentUser = true;
+      }
 
       const totalQ = (!isNaN(Number(s.totalQuestions)) && Number(s.totalQuestions) > 0) ? Number(s.totalQuestions) : 70;
       const maxM = (!isNaN(Number(s.maxMarks)) && Number(s.maxMarks) > 0) ? Number(s.maxMarks) : totalQ;
@@ -175,10 +190,14 @@ export default function Leaderboard({
       existing.accuracySum += acc;
       existing.examsCount += 1;
 
+      // Detect 70 Marks vs 140 Questions Drill reliably
+      const is70 = totalQ === 70 || s.examType === '70_marks' || (s.examTitle && s.examTitle.toLowerCase().includes('70'));
+      const is140 = totalQ === 140 || s.examType === '140_half' || s.examType === '140_full' || (s.examTitle && s.examTitle.toLowerCase().includes('140'));
+
       // Track 70 Marks Exam performance
-      if (totalQ === 70) {
+      if (is70) {
         existing.count70 += 1;
-        if (marks > existing.best70Marks || (marks === existing.best70Marks && correct > existing.best70Solved)) {
+        if (existing.count70 === 1 || marks > existing.best70Marks || (marks === existing.best70Marks && correct > existing.best70Solved)) {
           existing.best70Marks = marks;
           existing.best70Solved = correct;
           existing.best70Percentage = pct;
@@ -186,9 +205,9 @@ export default function Leaderboard({
       }
 
       // Track 140 Questions Drill performance
-      if (totalQ === 140) {
+      if (is140) {
         existing.count140 += 1;
-        if (correct > existing.best140Solved || (correct === existing.best140Solved && marks > existing.best140Marks)) {
+        if (existing.count140 === 1 || correct > existing.best140Solved || (correct === existing.best140Solved && marks > existing.best140Marks)) {
           existing.best140Solved = correct;
           existing.best140Marks = marks;
           existing.best140MaxMarks = maxM;
@@ -200,13 +219,15 @@ export default function Leaderboard({
         existing.lastSession = s;
       }
 
-      studentStats.set(key, existing);
+      studentStats.set(studentKey, existing);
     });
 
     // If current student has no exam yet, show with 0 Qs if not opted out
-    if (!isOptedOut && currKey && !studentStats.has(currKey)) {
-      studentStats.set(currKey, {
-        name: currentStudentName,
+    if (!isOptedOut && currId && !studentStats.has(currId)) {
+      studentStats.set(currId, {
+        id: currId,
+        studentId: currId,
+        name: currentStudentName || 'Candidate',
         college: "Your Institution",
         isCurrentUser: true,
         totalQuestionsAttempted: 0,
@@ -227,8 +248,8 @@ export default function Leaderboard({
       });
     }
 
-    if (isOptedOut && currKey) {
-      studentStats.delete(currKey);
+    if (isOptedOut && currId) {
+      studentStats.delete(currId);
     }
 
     // Compute average accuracy
@@ -239,7 +260,7 @@ export default function Leaderboard({
     });
 
     return Array.from(studentStats.values());
-  }, [sessions, currentStudentName, isOptedOut]);
+  }, [sessions, currentStudentName, resolvedStudentId, isOptedOut]);
 
   // Filter and sort rankings according to selected exam tab
   const tabRankings = useMemo(() => {
@@ -592,7 +613,7 @@ export default function Leaderboard({
 
                 return (
                   <tr
-                    key={student.name}
+                    key={student.id || student.studentId || `${student.name}_${student.rank}`}
                     className={`transition-colors ${
                       student.isCurrentUser
                         ? 'bg-amber-100/50 dark:bg-[#2B2317] font-semibold'

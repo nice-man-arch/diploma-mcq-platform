@@ -4,6 +4,24 @@ import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/fir
 
 const LOCAL_STORAGE_KEY = 'diploma_student_sessions';
 const STUDENT_PROFILE_KEY = 'diploma_current_student_profile';
+const STUDENT_ID_KEY = 'diploma_student_id';
+
+/**
+ * Get or create a unique persistent student candidate ID
+ * Allows multiple different students across devices/colleges to share the same name
+ */
+export function getOrCreateStudentId() {
+  try {
+    let id = localStorage.getItem(STUDENT_ID_KEY);
+    if (!id) {
+      id = 'std_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 6);
+      localStorage.setItem(STUDENT_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return 'std_' + Date.now().toString(36);
+  }
+}
 
 /**
  * Helper to safely extract a non-NaN number
@@ -68,8 +86,11 @@ export async function recordStudentSession(sessionData) {
     examType = 'quick_25';
   }
 
+  const studentId = sessionData.studentId || getOrCreateStudentId();
+
   const sessionRecord = {
     id: `sess_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+    studentId,
     studentName: resolvedName,
     college: sessionData.college || 'Polytechnic Student',
     examTitle: sessionData.examTitle || (totalQ === 140 ? (maxM === 140 ? '140 Marks Full Mock' : '140 Questions (Half-Mark Drill)') : '70 Marks Board Exam'),
@@ -103,6 +124,7 @@ export async function recordStudentSession(sessionData) {
   // 3. Sync to Firebase Firestore cloud database (with 3.5s timeout guard)
   try {
     const syncPromise = addDoc(collection(db, 'leaderboard_sessions'), {
+      studentId: sessionRecord.studentId,
       studentName: sessionRecord.studentName,
       college: sessionRecord.college,
       examTitle: sessionRecord.examTitle,
@@ -157,6 +179,7 @@ export function getLocalSessions() {
 
             map.set(s.id || s.timestamp, {
               ...s,
+              studentId: s.studentId || getOrCreateStudentId(),
               totalQuestions: safeNumber(s.totalQuestions, 70),
               correctCount: Math.max(0, correct),
               marksObtained: marks,
@@ -197,6 +220,7 @@ export function getLocalSessions() {
 
             map.set(key, {
               id: key,
+              studentId: getOrCreateStudentId(),
               studentName,
               college: 'Polytechnic Student',
               examTitle: h.title || (totalQ === 140 ? '140 Questions Drill' : '70 Marks Board Exam'),
@@ -250,6 +274,7 @@ export async function getAllStudentSessions() {
 
           return {
             id: doc.id,
+            studentId: d.studentId || doc.id,
             ...d,
             totalQuestions: safeNumber(d.totalQuestions, 70),
             correctCount: Math.max(0, correct),
@@ -294,6 +319,7 @@ export async function syncLocalSessionsToCloud() {
     if (!s.firebaseSynced && !s.firebaseId) {
       try {
         const docRef = await addDoc(collection(db, 'leaderboard_sessions'), {
+          studentId: s.studentId || getOrCreateStudentId(),
           studentName: s.studentName,
           college: s.college || 'Polytechnic Student',
           examTitle: s.examTitle,

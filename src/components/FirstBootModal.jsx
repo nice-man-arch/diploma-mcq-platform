@@ -1,8 +1,7 @@
 // src/components/FirstBootModal.jsx
 import React, { useState } from 'react';
 import { User, Trophy, ArrowRight, Award } from 'lucide-react';
-import { detectStudentLocation } from '../utils/locationService';
-import { saveStudentProfile } from '../utils/sessionService';
+import { saveStudentProfile, getOrCreateStudentId } from '../utils/sessionService';
 
 export default function FirstBootModal({ isOpen, onComplete }) {
   const [name, setName] = useState('');
@@ -19,23 +18,17 @@ export default function FirstBootModal({ isOpen, onComplete }) {
     }
 
     setIsSubmitting(true);
-
-    // Silently detect IP address in background without GPS popups
-    let loc = null;
-    try {
-      loc = await detectStudentLocation();
-    } catch {
-      loc = { city: 'Local Area', country: 'India', ip: 'Unknown IP', source: 'ip' };
-    }
+    const studentId = getOrCreateStudentId();
 
     const profile = {
+      id: studentId,
       name: name.trim(),
-      location: loc,
       joinedAt: new Date().toISOString()
     };
 
     saveStudentProfile(profile);
     localStorage.setItem('diploma_student_name', name.trim());
+    localStorage.setItem('diploma_student_id', studentId);
     setIsSubmitting(false);
     onComplete(profile);
   };
