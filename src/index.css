@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --theme-border: #18181b; /* dark border in white/light mode */
+    --theme-border-hover: #000000;
+    --theme-border-subtle: #27272a;
+    --theme-bg: #fcfcfb;
+    --theme-card: #ffffff;
+    --theme-text: #09090b;
+    --theme-text-muted: #52525b;
+  }
+
+  .dark {
+    --theme-border: rgba(255, 255, 255, 0.45); /* crisp white border in dark mode */
+    --theme-border-hover: #ffffff;
+    --theme-border-subtle: rgba(255, 255, 255, 0.3);
+    --theme-bg: #191919;
+    --theme-card: #202020;
+    --theme-text: #E3E3E3;
+    --theme-text-muted: #9B9A97;
+  }
+
+  * {
+    border-color: var(--theme-border);
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    letter-spacing: -0.012em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Ensure all border classes honor white border in dark mode and dark border in light mode */
+.dark * {
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+:not(.dark) * {
+  border-color: #18181b;
+}
+
+/* High-priority border overrides for Notion dark / light styling */
+.dark .border-\[\#2F2F2F\],
+.dark .border-\[\#3E3E3E\],
+.dark .border-\[\#333333\],
+.dark .border-\[\#242424\],
+.dark .border-\[\#4A4A4A\],
+.dark .border-\[\#555555\],
+.dark .border-notion-border {
+  border-color: rgba(255, 255, 255, 0.45) !important;
+}
+
+.dark .divide-\[\#2F2F2F\] > :not([hidden]) ~ :not([hidden]),
+.dark .divide-notion-border > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(255, 255, 255, 0.45) !important;
+}
+
+.dark .hover\:border-\[\#3E3E3E\]:hover,
+.dark .hover\:border-\[\#4A4A4A\]:hover,
+.dark .hover\:border-white:hover {
+  border-color: #ffffff !important;
+}
+
+/* Light mode overrides: crisp dark border on white background */
+:not(.dark) .border-\[\#2F2F2F\],
+:not(.dark) .border-\[\#3E3E3E\],
+:not(.dark) .border-\[\#333333\],
+:not(.dark) .border-\[\#242424\],
+:not(.dark) .border-\[\#4A4A4A\],
+:not(.dark) .border-\[\#555555\],
+:not(.dark) .border-notion-border {
+  border-color: #18181b !important;
+}
+
+:not(.dark) .divide-\[\#2F2F2F\] > :not([hidden]) ~ :not([hidden]),
+:not(.dark) .divide-notion-border > :not([hidden]) ~ :not([hidden]) {
+  border-color: #18181b !important;
+}
+
+:not(.dark) .hover\:border-\[\#3E3E3E\]:hover,
+:not(.dark) .hover\:border-\[\#4A4A4A\]:hover,
+:not(.dark) .hover\:border-black:hover {
+  border-color: #000000 !important;
+}
+
+/* Minimal Notion-like scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.65);
+}
+
+:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+
+:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
