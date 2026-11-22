@@ -292,13 +292,12 @@ export default function App() {
     });
     setHistory(getQuizHistory());
 
-    // Silently capture student name and IP location into Central Admin Sessions
+    // Record student exam session for Leaderboard ranking
     const studentName = localStorage.getItem('diploma_student_name') || currentStudent?.name || 'Candidate';
     recordStudentSession({
       studentName,
       studentId: currentStudent?.rollNo || '',
-      college: currentStudent?.college || '',
-      location: currentStudent?.location || { city: 'Local Area', country: 'India', source: 'ip' },
+      college: currentStudent?.college || 'Polytechnic Student',
       examTitle: activeExamTitle,
       totalQuestions: evalResult.totalQuestions,
       markPerQuestion: activeMarkPerQuestion,
@@ -423,7 +422,7 @@ export default function App() {
           {currentView === 'leaderboard' && (
             <Leaderboard
               currentStudentName={localStorage.getItem('diploma_student_name') || currentStudent?.name}
-              onLaunchExam={() => handleLaunchPreset('70_marks')}
+              onLaunchExam={(preset) => handleLaunchPreset(preset || '70_marks')}
               isOptedOut={isLeaderboardOptedOut}
               onToggleOptOut={() => {
                 const nextVal = !isLeaderboardOptedOut;

@@ -13,7 +13,11 @@ import {
   Sparkles,
   Settings,
   EyeOff,
-  HeartHandshake
+  HeartHandshake,
+  Layers,
+  Target,
+  Clock,
+  RotateCcw
 } from 'lucide-react';
 import { getAllStudentSessions, getLocalSessions } from '../utils/sessionService';
 import { db } from '../utils/firebase';
@@ -28,10 +32,23 @@ export default function Leaderboard({
 }) {
   const [sessions, setSessions] = useState(() => getLocalSessions());
   const [searchQuery, setSearchQuery] = useState('');
+  const [examTab, setExamTab] = useState('all'); // 'all' | '70_marks' | '140_drill'
 
+  // Load and listen for session updates
   useEffect(() => {
-    let unsubscribe = () => {};
+    // 1. Immediately reload local sessions
+    setSessions(getLocalSessions());
 
+    // 2. Listen for immediate zero-latency in-app exam completion events
+    const handleLocalUpdate = (e) => {
+      const freshLocal = getLocalSessions();
+      setSessions(freshLocal);
+    };
+    window.addEventListener('diploma_session_recorded', handleLocalUpdate);
+    window.addEventListener('storage', handleLocalUpdate);
+
+    // 3. Attach Firebase Firestore real-time subscription
+    let unsubscribe = () => {};
     try {
       const q = query(
         collection(db, 'leaderboard_sessions'),
@@ -57,7 +74,7 @@ export default function Leaderboard({
           setSessions(Array.from(map.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
         },
         (err) => {
-          console.warn('Real-time sync notice, fetching via standard query:', err.message);
+          console.warn('Firestore live listener notice (operating in local cache mode):', err.message);
           getAllStudentSessions().then(data => {
             if (data && Array.isArray(data)) {
               setSessions(data);
@@ -66,7 +83,7 @@ export default function Leaderboard({
         }
       );
     } catch (err) {
-      console.warn('Firestore subscription fallback:', err.message);
+      console.warn('Firestore listener setup fallback:', err.message);
       getAllStudentSessions().then(data => {
         if (data && Array.isArray(data)) {
           setSessions(data);
@@ -75,6 +92,8 @@ export default function Leaderboard({
     }
 
     return () => {
+      window.removeEventListener('diploma_session_recorded', handleLocalUpdate);
+      window.removeEventListener('storage', handleLocalUpdate);
       try {
         unsubscribe();
       } catch {}
@@ -82,13 +101,12 @@ export default function Leaderboard({
   }, []);
 
   // Compute live ranking table strictly from actual student exam sessions
-  const rankings = useMemo(() => {
+  const allStudentStats = useMemo(() => {
     const studentStats = new Map();
     const currKey = currentStudentName ? currentStudentName.toLowerCase().trim() : '';
 
-    // Aggregate strictly from recorded real student sessions (No fake dummy data)
     sessions.forEach(s => {
-      const name = s.studentName ? s.studentName.trim() : 'Anonymous';
+      const name = s.studentName ? s.studentName.trim() : 'Scholar';
       const key = name.toLowerCase();
 
       // If current student has opted out, exclude their sessions from public leaderboard
@@ -98,67 +116,157 @@ export default function Leaderboard({
 
       const existing = studentStats.get(key) || {
         name,
-        questionsSolved: 0,
-        marksObtained: 0,
-        accuracy: 0,
+        college: s.college || 'Polytechnic Student',
+        isCurrentUser: !isOptedOut && currKey && key === currKey,
+        totalQuestionsAttempted: 0,
+        totalQuestionsSolved: 0,
+        totalMarksObtained: 0,
+        accuracySum: 0,
         examsCount: 0,
-        college: s.college || (s.location?.city ? `${s.location.city} Polytechnic` : 'Polytechnic Student'),
-        isCurrentUser: !isOptedOut && currKey && key === currKey
+        
+        // 70 Marks Board Exam metrics
+        count70: 0,
+        best70Solved: 0,
+        best70Marks: 0,
+        best70Percentage: 0,
+
+        // 140 Questions Drill metrics
+        count140: 0,
+        best140Solved: 0,
+        best140Marks: 0,
+        best140MaxMarks: 70,
+        best140Percentage: 0,
+
+        // Recent session
+        lastSession: null
       };
 
-      existing.questionsSolved += (s.totalQuestions || 0);
-      existing.marksObtained += (s.marksObtained || 0);
+      const totalQ = Number(s.totalQuestions) || 70;
+      const maxM = Number(s.maxMarks) || totalQ;
+      const marks = Number(s.marksObtained) || 0;
+      const correct = Number(s.correctCount) != null ? Number(s.correctCount) : Math.round(marks / (Number(s.markPerQuestion) || 1));
+      const pct = Number(s.percentage) || (maxM > 0 ? Math.round((marks / maxM) * 100) : 0);
+      const acc = Number(s.accuracy) || pct;
+
+      existing.totalQuestionsAttempted += totalQ;
+      existing.totalQuestionsSolved += correct;
+      existing.totalMarksObtained += marks;
+      existing.accuracySum += acc;
       existing.examsCount += 1;
-      existing.accuracy = existing.examsCount > 0 
-        ? Math.round(((existing.accuracy * (existing.examsCount - 1)) + (s.accuracy || 0)) / existing.examsCount)
-        : (s.accuracy || 0);
+
+      // Track 70 Marks Exam performance
+      if (totalQ === 70) {
+        existing.count70 += 1;
+        if (marks > existing.best70Marks || (marks === existing.best70Marks && correct > existing.best70Solved)) {
+          existing.best70Marks = marks;
+          existing.best70Solved = correct;
+          existing.best70Percentage = pct;
+        }
+      }
+
+      // Track 140 Questions Drill performance
+      if (totalQ === 140) {
+        existing.count140 += 1;
+        if (correct > existing.best140Solved || (correct === existing.best140Solved && marks > existing.best140Marks)) {
+          existing.best140Solved = correct;
+          existing.best140Marks = marks;
+          existing.best140MaxMarks = maxM;
+          existing.best140Percentage = pct;
+        }
+      }
+
+      if (!existing.lastSession || new Date(s.timestamp) > new Date(existing.lastSession.timestamp)) {
+        existing.lastSession = s;
+      }
 
       studentStats.set(key, existing);
     });
 
-    // If current student is registered and has not taken any exams yet, show on board with 0 Qs if not opted out
+    // If current student has no exam yet, show with 0 Qs if not opted out
     if (!isOptedOut && currKey && !studentStats.has(currKey)) {
       studentStats.set(currKey, {
         name: currentStudentName,
-        questionsSolved: 0,
-        marksObtained: 0,
-        accuracy: 0,
-        examsCount: 0,
         college: "Your Institution",
-        isCurrentUser: true
+        isCurrentUser: true,
+        totalQuestionsAttempted: 0,
+        totalQuestionsSolved: 0,
+        totalMarksObtained: 0,
+        accuracySum: 0,
+        examsCount: 0,
+        count70: 0,
+        best70Solved: 0,
+        best70Marks: 0,
+        best70Percentage: 0,
+        count140: 0,
+        best140Solved: 0,
+        best140Marks: 0,
+        best140MaxMarks: 70,
+        best140Percentage: 0,
+        lastSession: null
       });
     }
 
-    // If opted out, ensure current student is completely removed
     if (isOptedOut && currKey) {
       studentStats.delete(currKey);
     }
 
-    // Sort by Questions Solved desc, then Marks Obtained desc
-    const sorted = Array.from(studentStats.values()).sort((a, b) => {
-      if (b.questionsSolved !== a.questionsSolved) {
-        return b.questionsSolved - a.questionsSolved;
-      }
-      return b.marksObtained - a.marksObtained;
+    // Compute average accuracy
+    Array.from(studentStats.values()).forEach(item => {
+      item.accuracy = item.examsCount > 0 ? Math.round(item.accuracySum / item.examsCount) : 0;
+      item.totalMarksObtained = Math.round(item.totalMarksObtained * 10) / 10;
     });
 
-    return sorted.map((item, idx) => ({
+    return Array.from(studentStats.values());
+  }, [sessions, currentStudentName, isOptedOut]);
+
+  // Filter and sort rankings according to selected exam tab
+  const tabRankings = useMemo(() => {
+    let list = [...allStudentStats];
+
+    if (examTab === '70_marks') {
+      // Show only students who have attempted 70 Marks Board Exam (or current student)
+      list = list.filter(s => s.count70 > 0 || (s.isCurrentUser && s.examsCount === 0));
+      list.sort((a, b) => {
+        if (b.best70Marks !== a.best70Marks) return b.best70Marks - a.best70Marks;
+        if (b.best70Solved !== a.best70Solved) return b.best70Solved - a.best70Solved;
+        return b.best70Percentage - a.best70Percentage;
+      });
+    } else if (examTab === '140_drill') {
+      // Show only students who have attempted 140 Questions Drill (or current student)
+      list = list.filter(s => s.count140 > 0 || (s.isCurrentUser && s.examsCount === 0));
+      list.sort((a, b) => {
+        if (b.best140Solved !== a.best140Solved) return b.best140Solved - a.best140Solved;
+        if (b.best140Marks !== a.best140Marks) return b.best140Marks - a.best140Marks;
+        return b.best140Percentage - a.best140Percentage;
+      });
+    } else {
+      // Overall: sorted by total questions solved, then total marks obtained
+      list.sort((a, b) => {
+        if (b.totalQuestionsSolved !== a.totalQuestionsSolved) {
+          return b.totalQuestionsSolved - a.totalQuestionsSolved;
+        }
+        return b.totalMarksObtained - a.totalMarksObtained;
+      });
+    }
+
+    return list.map((item, idx) => ({
       ...item,
       rank: idx + 1
     }));
-  }, [sessions, currentStudentName, isOptedOut]);
+  }, [allStudentStats, examTab]);
 
   const filteredRankings = useMemo(() => {
-    if (!searchQuery.trim()) return rankings;
+    if (!searchQuery.trim()) return tabRankings;
     const q = searchQuery.toLowerCase();
-    return rankings.filter(r => 
+    return tabRankings.filter(r => 
       r.name.toLowerCase().includes(q) || 
       (r.college || '').toLowerCase().includes(q)
     );
-  }, [rankings, searchQuery]);
+  }, [tabRankings, searchQuery]);
 
-  const topThree = rankings.slice(0, 3);
-  const currentUserRank = rankings.find(r => r.isCurrentUser);
+  const topThree = tabRankings.slice(0, 3);
+  const currentUserStanding = allStudentStats.find(r => r.isCurrentUser);
+  const currentUserInTab = tabRankings.find(r => r.isCurrentUser);
 
   return (
     <div className="max-w-5xl mx-auto py-8 space-y-8 text-zinc-900 dark:text-[#E3E3E3]">
@@ -174,7 +282,7 @@ export default function Leaderboard({
               Top Scholar Leaderboard
             </h1>
             <p className="text-sm text-zinc-600 dark:text-[#9B9A97] mt-1 leading-relaxed">
-              Real-time rankings based on total questions solved, exam scores, and accuracy across polytechnics.
+              Real-time rankings tracking <strong className="text-zinc-900 dark:text-white">70 Marks Board Exams</strong> and <strong className="text-zinc-900 dark:text-white">140 Questions Drills</strong> with verified questions solved across polytechnics.
             </p>
           </div>
 
@@ -194,11 +302,11 @@ export default function Leaderboard({
             {onLaunchExam && (
               <button
                 type="button"
-                onClick={onLaunchExam}
+                onClick={() => onLaunchExam(examTab === '140_drill' ? '140_half' : '70_marks')}
                 className="rounded-sm border border-zinc-900 dark:border-white/60 bg-zinc-900 dark:bg-white px-4 py-2 text-xs sm:text-sm font-bold text-white dark:text-[#191919] hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors flex items-center gap-2 cursor-pointer shrink-0"
               >
                 <Zap className="h-4 w-4 text-amber-400 fill-current" />
-                <span>Solve Questions to Rank Up</span>
+                <span>{examTab === '140_drill' ? 'Solve 140 Qs Drill' : 'Solve 70 Marks Exam'}</span>
               </button>
             )}
           </div>
@@ -242,120 +350,131 @@ export default function Leaderboard({
         </div>
       )}
 
-      {/* Current Student's Rank Card (if registered) */}
-      {currentUserRank && (
-        <div className="rounded-md border-2 border-amber-600 dark:border-amber-400 bg-amber-50/60 dark:bg-[#2A2318] p-5 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="flex h-12 w-12 items-center justify-center rounded-sm bg-amber-500 text-white font-mono font-black text-xl shadow-xs">
-              #{currentUserRank.rank}
+      {/* Current Student's Rank & Performance Overview Card */}
+      {currentUserStanding && (
+        <div className="rounded-md border-2 border-amber-600 dark:border-amber-400 bg-amber-50/60 dark:bg-[#2A2318] p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-sm bg-amber-500 text-white font-mono font-black text-xl shadow-xs">
+                #{currentUserInTab?.rank || 1}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold text-base sm:text-lg text-zinc-900 dark:text-white">
+                    {currentUserStanding.name} (You)
+                  </span>
+                  <span className="rounded-xs border border-amber-700 bg-amber-100 dark:bg-[#3E3220] px-2 py-0.5 text-xs font-bold text-amber-800 dark:text-[#D1B280]">
+                    Your Standing
+                  </span>
+                </div>
+                <div className="text-xs text-zinc-600 dark:text-[#9B9A97]">
+                  {currentUserStanding.examsCount === 0 
+                    ? "Take a 70 Marks or 140 Questions exam to record your first points!" 
+                    : `${currentUserStanding.examsCount} tests completed • ${currentUserStanding.accuracy}% overall accuracy`}
+                </div>
+              </div>
             </div>
-            <div>
+
+            <div className="flex items-center gap-4 text-right">
+              <div>
+                <div className="text-xs font-bold text-zinc-500 uppercase">Total Questions Solved</div>
+                <div className="text-2xl font-mono font-extrabold text-zinc-900 dark:text-white">
+                  {currentUserStanding.totalQuestionsSolved} Qs
+                </div>
+              </div>
+              <div className="border-l border-zinc-300 dark:border-zinc-700 pl-4">
+                <div className="text-xs font-bold text-zinc-500 uppercase">Total Points</div>
+                <div className="text-2xl font-mono font-extrabold text-amber-600 dark:text-[#D1B280]">
+                  {currentUserStanding.totalMarksObtained}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Exam Tier Badges for Current Student */}
+          <div className="pt-3 border-t border-amber-600/30 dark:border-amber-400/30 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div className="rounded-sm border border-amber-600/40 dark:border-amber-400/30 bg-white/70 dark:bg-[#1E1912] p-2.5 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base sm:text-lg text-zinc-900 dark:text-white">
-                  {currentUserRank.name} (You)
-                </span>
-                <span className="rounded-xs border border-amber-700 bg-amber-100 dark:bg-[#3E3220] px-2 py-0.5 text-xs font-bold text-amber-800 dark:text-[#D1B280]">
-                  Your Standing
-                </span>
+                <Target className="h-4 w-4 text-emerald-600 dark:text-[#85B59A]" />
+                <span className="font-bold text-zinc-800 dark:text-zinc-200">70 Marks Board Exam:</span>
               </div>
-              <div className="text-xs text-zinc-600 dark:text-[#9B9A97]">
-                {currentUserRank.questionsSolved === 0 
-                  ? "Take an exam or instant practice session to register your first points!" 
-                  : `${currentUserRank.questionsSolved} questions solved • ${currentUserRank.accuracy}% accuracy`}
-              </div>
+              <span className="font-mono font-bold text-zinc-900 dark:text-white">
+                {currentUserStanding.count70 > 0 
+                  ? `${currentUserStanding.best70Solved} / 70 Solved (${currentUserStanding.best70Marks}/70 M)`
+                  : 'Not Attempted Yet'}
+              </span>
             </div>
-          </div>
 
-          <div className="flex items-center gap-4 text-right">
-            <div>
-              <div className="text-xs font-bold text-zinc-500 uppercase">Questions Solved</div>
-              <div className="text-2xl font-mono font-extrabold text-zinc-900 dark:text-white">
-                {currentUserRank.questionsSolved}
+            <div className="rounded-sm border border-amber-600/40 dark:border-amber-400/30 bg-white/70 dark:bg-[#1E1912] p-2.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-sky-600 dark:text-[#8FAFC4]" />
+                <span className="font-bold text-zinc-800 dark:text-zinc-200">140 Questions Drill:</span>
               </div>
-            </div>
-            <div className="border-l border-zinc-300 dark:border-zinc-700 pl-4">
-              <div className="text-xs font-bold text-zinc-500 uppercase">Total Marks</div>
-              <div className="text-2xl font-mono font-extrabold text-amber-600 dark:text-[#D1B280]">
-                {currentUserRank.marksObtained}
-              </div>
+              <span className="font-mono font-bold text-zinc-900 dark:text-white">
+                {currentUserStanding.count140 > 0 
+                  ? `${currentUserStanding.best140Solved} / 140 Solved (${currentUserStanding.best140Marks}/${currentUserStanding.best140MaxMarks} M)`
+                  : 'Not Attempted Yet'}
+              </span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Top Podium Cards (Only rendered if scholars have completed tests) */}
-      {topThree.length > 0 && topThree.some(s => s.questionsSolved > 0) && (
-        <div className={`grid grid-cols-1 ${
-          topThree.filter(s => s.questionsSolved > 0).length === 1 
-            ? 'md:grid-cols-1 max-w-md' 
-            : topThree.filter(s => s.questionsSolved > 0).length === 2 
-            ? 'md:grid-cols-2 max-w-2xl' 
-            : 'md:grid-cols-3'
-        } gap-4`}>
-          {topThree.filter(s => s.questionsSolved > 0).map((scholar, idx) => {
-            const medals = [
-              { label: "1st Place", badge: "🥇 Rank #1", bg: "border-amber-500 bg-amber-50/40 dark:bg-[#262017]" },
-              { label: "2nd Place", badge: "🥈 Rank #2", bg: "border-zinc-400 bg-zinc-50/40 dark:bg-[#202020]" },
-              { label: "3rd Place", badge: "🥉 Rank #3", bg: "border-amber-700/60 bg-amber-50/20 dark:bg-[#221B17]" },
-            ];
-            const m = medals[idx] || medals[0];
+      {/* Exam Format Filter Tabs */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+        <div className="inline-flex rounded-md border border-zinc-800 dark:border-white/45 bg-zinc-100 dark:bg-[#202020] p-1 text-xs sm:text-sm font-semibold">
+          <button
+            type="button"
+            onClick={() => setExamTab('all')}
+            className={`px-3 py-1.5 rounded-sm transition-all cursor-pointer flex items-center gap-1.5 ${
+              examTab === 'all'
+                ? 'bg-white dark:bg-[#2C2C2C] text-zinc-900 dark:text-white shadow-xs font-bold'
+                : 'text-zinc-600 dark:text-[#9B9A97] hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+            <span>All Formats</span>
+          </button>
 
-            return (
-              <div
-                key={scholar.name}
-                className={`rounded-md border-2 ${m.bg} p-5 space-y-3 relative overflow-hidden shadow-xs`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-extrabold text-xs tracking-wider uppercase text-zinc-700 dark:text-[#D1B280]">
-                    {m.badge}
-                  </span>
-                  <span className="rounded-xs border border-zinc-800 dark:border-white/30 px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-600 dark:text-[#9B9A97]">
-                    {scholar.accuracy}% ACC
-                  </span>
-                </div>
+          <button
+            type="button"
+            onClick={() => setExamTab('70_marks')}
+            className={`px-3 py-1.5 rounded-sm transition-all cursor-pointer flex items-center gap-1.5 ${
+              examTab === '70_marks'
+                ? 'bg-white dark:bg-[#2C2C2C] text-zinc-900 dark:text-white shadow-xs font-bold'
+                : 'text-zinc-600 dark:text-[#9B9A97] hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            <Target className="h-3.5 w-3.5 text-emerald-600 dark:text-[#85B59A]" />
+            <span>70 Marks Board Exam</span>
+          </button>
 
-                <div>
-                  <h3 className="text-lg font-bold text-zinc-900 dark:text-white truncate">
-                    {scholar.name} {scholar.isCurrentUser ? '(You)' : ''}
-                  </h3>
-                  <p className="text-xs text-zinc-500 dark:text-[#9B9A97] truncate mt-0.5">
-                    {scholar.college}
-                  </p>
-                </div>
-
-                <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs">
-                  <div>
-                    <div className="text-zinc-500">Solved</div>
-                    <div className="font-mono font-bold text-base text-zinc-900 dark:text-white">
-                      {scholar.questionsSolved} Qs
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-zinc-500">Total Score</div>
-                    <div className="font-mono font-bold text-base text-amber-600 dark:text-[#D1B280]">
-                      {scholar.marksObtained} pts
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          <button
+            type="button"
+            onClick={() => setExamTab('140_drill')}
+            className={`px-3 py-1.5 rounded-sm transition-all cursor-pointer flex items-center gap-1.5 ${
+              examTab === '140_drill'
+                ? 'bg-white dark:bg-[#2C2C2C] text-zinc-900 dark:text-white shadow-xs font-bold'
+                : 'text-zinc-600 dark:text-[#9B9A97] hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            <Clock className="h-3.5 w-3.5 text-sky-600 dark:text-[#8FAFC4]" />
+            <span>140 Questions Drill</span>
+          </button>
         </div>
-      )}
 
-      {/* Search Filter */}
-      {filteredRankings.length > 0 && (
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500 dark:text-[#9B9A97]" />
+        {/* Search Filter */}
+        <div className="relative flex-1 sm:max-w-xs">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500 dark:text-[#9B9A97]" />
           <input
             type="text"
-            placeholder="Search scholar by student name or institution..."
+            placeholder="Search student or college..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#202020] py-2.5 pl-9 pr-3 text-xs sm:text-sm text-zinc-900 dark:text-[#E3E3E3] focus:border-zinc-950 dark:focus:border-white focus:outline-hidden"
+            className="w-full rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#202020] py-1.5 pl-9 pr-3 text-xs sm:text-sm text-zinc-900 dark:text-[#E3E3E3] focus:border-zinc-950 dark:focus:border-white focus:outline-hidden"
           />
         </div>
-      )}
+      </div>
 
       {/* Main Leaderboard Table or Empty State */}
       {filteredRankings.length === 0 ? (
@@ -365,20 +484,24 @@ export default function Leaderboard({
           </div>
           <div className="space-y-1">
             <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
-              No Exam Submissions Yet
+              {examTab === '70_marks' 
+                ? 'No 70 Marks Submissions Yet' 
+                : examTab === '140_drill' 
+                ? 'No 140 Questions Submissions Yet' 
+                : 'No Exam Submissions Yet'}
             </h3>
             <p className="text-sm text-zinc-600 dark:text-[#9B9A97] max-w-md mx-auto">
-              Complete your first 70 Marks Exam or Instant Practice drill to register your score and claim Rank #1!
+              Complete your exam now to register your score, see how many you solved out of {examTab === '140_drill' ? '140' : '70'}, and claim Rank #1!
             </p>
           </div>
           {onLaunchExam && (
             <button
               type="button"
-              onClick={onLaunchExam}
+              onClick={() => onLaunchExam(examTab === '140_drill' ? '140_half' : '70_marks')}
               className="rounded-sm border border-zinc-900 dark:border-white/60 bg-zinc-900 dark:bg-white px-5 py-2 text-sm font-bold text-white dark:text-[#191919] hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors inline-flex items-center gap-2 cursor-pointer"
             >
               <Zap className="h-4 w-4 text-amber-400 fill-current" />
-              <span>Start Your First Exam</span>
+              <span>{examTab === '140_drill' ? 'Start 140 Questions Drill' : 'Start 70 Marks Board Exam'}</span>
             </button>
           )}
         </div>
@@ -389,10 +512,33 @@ export default function Leaderboard({
               <tr className="border-b border-zinc-800 dark:border-white/45 text-zinc-600 dark:text-[#9B9A97] font-bold bg-zinc-50 dark:bg-[#191919]">
                 <th className="py-3 px-4 font-bold text-center w-16">Rank</th>
                 <th className="py-3 px-4 font-bold">Candidate Scholar</th>
-                <th className="py-3 px-4 font-bold text-center">Questions Solved</th>
-                <th className="py-3 px-4 font-bold text-center">Total Marks</th>
-                <th className="py-3 px-4 font-bold text-center">Accuracy</th>
-                <th className="py-3 px-4 font-bold text-right">Tests Taken</th>
+                
+                {examTab === '70_marks' && (
+                  <>
+                    <th className="py-3 px-4 font-bold text-center">70M Solved</th>
+                    <th className="py-3 px-4 font-bold text-center">Score (70M)</th>
+                    <th className="py-3 px-4 font-bold text-center">Percentage</th>
+                    <th className="py-3 px-4 font-bold text-right">Attempts</th>
+                  </>
+                )}
+
+                {examTab === '140_drill' && (
+                  <>
+                    <th className="py-3 px-4 font-bold text-center">140Q Solved</th>
+                    <th className="py-3 px-4 font-bold text-center">Marks Scored</th>
+                    <th className="py-3 px-4 font-bold text-center">Accuracy</th>
+                    <th className="py-3 px-4 font-bold text-right">Attempts</th>
+                  </>
+                )}
+
+                {examTab === 'all' && (
+                  <>
+                    <th className="py-3 px-4 font-bold text-center">Questions Solved</th>
+                    <th className="py-3 px-4 font-bold text-center">Total Points</th>
+                    <th className="py-3 px-4 font-bold text-center">Accuracy</th>
+                    <th className="py-3 px-4 font-bold text-right">Tests Taken</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800 dark:divide-white/45">
@@ -415,7 +561,7 @@ export default function Leaderboard({
                       {isFirst ? '🥇 #1' : isSecond ? '🥈 #2' : isThird ? '🥉 #3' : `#${student.rank}`}
                     </td>
 
-                    {/* Candidate */}
+                    {/* Candidate Scholar & Format Badges */}
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-zinc-900 dark:text-white text-sm sm:text-base">
@@ -427,32 +573,85 @@ export default function Leaderboard({
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-zinc-500 dark:text-[#9B9A97]">
-                        {student.college}
+                      
+                      <div className="text-xs text-zinc-500 dark:text-[#9B9A97] flex flex-wrap items-center gap-2 mt-0.5">
+                        <span>{student.college}</span>
+                        {examTab === 'all' && (
+                          <>
+                            {student.count70 > 0 && (
+                              <span className="rounded-xs border border-emerald-800/40 dark:border-white/30 bg-emerald-50 dark:bg-[#202B24] px-1.5 py-0.2 text-[10px] font-mono text-emerald-800 dark:text-[#85B59A]">
+                                70M: {student.best70Solved}/70
+                              </span>
+                            )}
+                            {student.count140 > 0 && (
+                              <span className="rounded-xs border border-sky-800/40 dark:border-white/30 bg-sky-50 dark:bg-[#1E2933] px-1.5 py-0.2 text-[10px] font-mono text-sky-800 dark:text-[#8FAFC4]">
+                                140Q: {student.best140Solved}/140
+                              </span>
+                            )}
+                          </>
+                        )}
                       </div>
                     </td>
 
-                    {/* Questions Solved */}
-                    <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-zinc-900 dark:text-white">
-                      {student.questionsSolved} Qs
-                    </td>
+                    {/* 70 Marks Columns */}
+                    {examTab === '70_marks' && (
+                      <>
+                        <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-zinc-900 dark:text-white">
+                          {student.best70Solved} / 70 Solved
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-amber-600 dark:text-[#D1B280]">
+                          {student.best70Marks} / 70 M
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className="rounded-sm border border-emerald-800/40 dark:border-white/30 bg-emerald-50 dark:bg-[#191919] px-2 py-0.5 text-xs font-mono font-bold text-emerald-800 dark:text-[#85B59A]">
+                            {student.best70Percentage}%
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-mono text-zinc-600 dark:text-[#9B9A97]">
+                          {student.count70} {student.count70 === 1 ? 'Exam' : 'Exams'}
+                        </td>
+                      </>
+                    )}
 
-                    {/* Total Marks */}
-                    <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-amber-600 dark:text-[#D1B280]">
-                      {student.marksObtained}
-                    </td>
+                    {/* 140 Questions Columns */}
+                    {examTab === '140_drill' && (
+                      <>
+                        <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-zinc-900 dark:text-white">
+                          {student.best140Solved} / 140 Solved
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-amber-600 dark:text-[#D1B280]">
+                          {student.best140Marks} / {student.best140MaxMarks} M
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className="rounded-sm border border-sky-800/40 dark:border-white/30 bg-sky-50 dark:bg-[#191919] px-2 py-0.5 text-xs font-mono font-bold text-sky-800 dark:text-[#8FAFC4]">
+                            {student.best140Percentage}%
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-mono text-zinc-600 dark:text-[#9B9A97]">
+                          {student.count140} {student.count140 === 1 ? 'Drill' : 'Drills'}
+                        </td>
+                      </>
+                    )}
 
-                    {/* Accuracy */}
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="rounded-sm border border-zinc-800 dark:border-white/30 bg-zinc-100 dark:bg-[#191919] px-2 py-0.5 text-xs font-mono font-bold">
-                        {student.accuracy}%
-                      </span>
-                    </td>
-
-                    {/* Tests Taken */}
-                    <td className="py-3.5 px-4 text-right font-mono text-zinc-600 dark:text-[#9B9A97]">
-                      {student.examsCount} {student.examsCount === 1 ? 'Exam' : 'Exams'}
-                    </td>
+                    {/* Overall All-Formats Columns */}
+                    {examTab === 'all' && (
+                      <>
+                        <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-zinc-900 dark:text-white">
+                          {student.totalQuestionsSolved} Qs
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-amber-600 dark:text-[#D1B280]">
+                          {student.totalMarksObtained}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className="rounded-sm border border-zinc-800 dark:border-white/30 bg-zinc-100 dark:bg-[#191919] px-2 py-0.5 text-xs font-mono font-bold">
+                            {student.accuracy}%
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-mono text-zinc-600 dark:text-[#9B9A97]">
+                          {student.examsCount} {student.examsCount === 1 ? 'Exam' : 'Exams'}
+                        </td>
+                      </>
+                    )}
                   </tr>
                 );
               })}
