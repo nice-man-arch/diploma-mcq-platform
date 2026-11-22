@@ -34,7 +34,6 @@ export default function Dashboard({
   onAdminUnlock
 }) {
   const [commandQuery, setCommandQuery] = useState('');
-  const [commandStatus, setCommandStatus] = useState('');
   const inputRef = useRef(null);
 
   const triggerAdminUnlock = () => {
@@ -44,9 +43,7 @@ export default function Dashboard({
   };
 
   const handleCommandChange = (e) => {
-    const val = e.target.value;
-    setCommandQuery(val);
-    if (commandStatus) setCommandStatus('');
+    setCommandQuery(e.target.value);
   };
 
   const handleCommandSubmit = (e) => {
@@ -54,14 +51,59 @@ export default function Dashboard({
     const cleaned = commandQuery.trim().toLowerCase();
     if (cleaned === '/test01' || cleaned === 'test01') {
       triggerAdminUnlock();
-      return;
-    }
-    if (cleaned.startsWith('/')) {
-      setCommandStatus(`System command "${commandQuery}" processed. No active module match.`);
-    } else if (cleaned.length > 0) {
-      setCommandStatus(`Query "${commandQuery}" processed. Browse units below to begin practice.`);
     }
   };
+
+  // Auto-focus the invisible input and support direct keystroke entry
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+
+    let keyBuffer = '';
+    let clearTimer = null;
+
+    const handleKeyDown = (e) => {
+      // Don't intercept if user is typing in another regular input
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName) && e.target !== inputRef.current) {
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        const cleaned = keyBuffer.trim().toLowerCase();
+        const inputCleaned = (inputRef.current?.value || '').trim().toLowerCase();
+        if (cleaned.endsWith('/test01') || cleaned.endsWith('test01') || inputCleaned === '/test01' || inputCleaned === 'test01') {
+          triggerAdminUnlock();
+          keyBuffer = '';
+          if (inputRef.current) inputRef.current.value = '';
+        }
+        return;
+      }
+
+      if (e.key === 'Backspace') {
+        keyBuffer = keyBuffer.slice(0, -1);
+        return;
+      }
+
+      if (e.key && e.key.length === 1) {
+        keyBuffer += e.key;
+        if (keyBuffer.length > 20) {
+          keyBuffer = keyBuffer.slice(-20);
+        }
+
+        clearTimeout(clearTimer);
+        clearTimer = setTimeout(() => {
+          keyBuffer = '';
+        }, 10000);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearTimeout(clearTimer);
+    };
+  }, []);
 
   return (
     <div className="max-w-5xl mx-auto py-8 space-y-12 text-zinc-900 dark:text-[#E3E3E3]">
@@ -83,37 +125,28 @@ export default function Dashboard({
 
         <p className="text-base sm:text-lg text-zinc-600 dark:text-[#9B9A97] leading-relaxed max-w-3xl">
           A minimalist high-retention mastery workspace for Diploma engineering students. Practice non-repeating randomized exam sets, review instant answers with memory hacks, and drill weak concepts in your mistake notebook.
+          {/* Microscopic touchpoint hidden inside punctuation (invisible to naked eye) */}
+          <span 
+            onClick={() => inputRef.current?.focus()} 
+            className="inline-block cursor-default select-none"
+            title=""
+          />
         </p>
 
-        {/* Visible Search & Command Textbox (Accessible for /test01 unlock) */}
-        <div className="pt-2 pb-1">
-          <form onSubmit={handleCommandSubmit} className="relative flex items-center max-w-2xl">
-            <div className="absolute left-3.5 flex items-center pointer-events-none text-zinc-500 dark:text-[#9B9A97]">
-              <Search className="h-4 w-4" />
-            </div>
-            <input
-              ref={inputRef}
-              type="text"
-              value={commandQuery}
-              onChange={handleCommandChange}
-              placeholder="Search question bank, syllabus, or enter /command..."
-              className="w-full pl-10 pr-24 py-2.5 rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#1E1E1E] text-zinc-900 dark:text-[#E3E3E3] font-mono text-sm placeholder:text-zinc-500 dark:placeholder:text-[#6F6E6B] focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-white transition-all shadow-xs"
-              autoComplete="off"
-              spellCheck="false"
-            />
-            <button
-              type="submit"
-              className="absolute right-1.5 px-3 py-1 rounded-sm border border-zinc-700 dark:border-white/40 bg-zinc-900 dark:bg-[#E3E3E3] text-white dark:text-[#191919] font-mono text-xs font-bold hover:bg-zinc-800 dark:hover:bg-white transition-all cursor-pointer"
-            >
-              Run ↵
-            </button>
-          </form>
-          {commandStatus && (
-            <p className="mt-2 text-xs font-mono text-zinc-500 dark:text-[#9B9A97] px-1">
-              {commandStatus}
-            </p>
-          )}
-        </div>
+        {/* Invisible / Microscopic Textbox (Completely undetectable to the naked eye) */}
+        <form onSubmit={handleCommandSubmit} className="inline">
+          <input
+            ref={inputRef}
+            type="text"
+            value={commandQuery}
+            onChange={handleCommandChange}
+            aria-hidden="true"
+            tabIndex={-1}
+            className="fixed bottom-0 right-0 w-[1px] h-[1px] opacity-0 pointer-events-auto border-0 p-0 m-0 outline-none overflow-hidden cursor-default"
+            autoComplete="off"
+            spellCheck="false"
+          />
+        </form>
 
         {/* Quick Launch Buttons */}
         <div className="pt-3 flex flex-wrap items-center gap-3">
