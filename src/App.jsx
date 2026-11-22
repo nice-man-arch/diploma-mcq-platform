@@ -29,7 +29,8 @@ import {
   getSavedStudentProfile, 
   saveStudentProfile, 
   recordStudentSession,
-  getOrCreateStudentId
+  getOrCreateStudentId,
+  updateStudentName
 } from './utils/sessionService';
 
 export default function App() {
@@ -81,9 +82,9 @@ export default function App() {
   });
 
   const handleUpdateSettings = ({ name, hideLeaderboard: hideL, isLeaderboardOptedOut: optOut }) => {
-    if (name) {
-      localStorage.setItem('diploma_student_name', name);
-      setCurrentStudent(prev => ({ ...(prev || {}), name }));
+    if (name && name.trim()) {
+      updateStudentName(name.trim());
+      setCurrentStudent(prev => ({ ...(prev || {}), name: name.trim() }));
     }
     localStorage.setItem('diploma_hide_leaderboard', hideL ? 'true' : 'false');
     localStorage.setItem('diploma_leaderboard_opt_out', optOut ? 'true' : 'false');

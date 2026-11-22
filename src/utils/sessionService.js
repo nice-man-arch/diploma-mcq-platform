@@ -1,6 +1,6 @@
 // src/utils/sessionService.js
 import { db } from './firebase';
-import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, limit, doc, updateDoc, where } from 'firebase/firestore';
 
 const LOCAL_STORAGE_KEY = 'diploma_student_sessions';
 const STUDENT_PROFILE_KEY = 'diploma_current_student_profile';
@@ -53,6 +53,78 @@ export function saveStudentProfile(profile) {
   } catch (e) {
     console.error('Error saving student profile:', e);
   }
+}
+
+/**
+ * Update student display name across storage, sessions, and Firestore
+ */
+export async function updateStudentName(newName) {
+  if (!newName || !newName.trim()) return;
+  const trimmed = newName.trim();
+  const oldName = localStorage.getItem('diploma_student_name') || '';
+  const currentId = getOrCreateStudentId();
+
+  // 1. Update localStorage key
+  localStorage.setItem('diploma_student_name', trimmed);
+
+  // 2. Update student profile
+  try {
+    const profile = getSavedStudentProfile() || {};
+    profile.name = trimmed;
+    profile.id = currentId;
+    saveStudentProfile(profile);
+  } catch {}
+
+  // 3. Update all existing local student sessions to the new name
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const updated = parsed.map(s => {
+          if (!s.studentId || s.studentId === currentId || (oldName && s.studentName === oldName)) {
+            return {
+              ...s,
+              studentName: trimmed,
+              studentId: currentId
+            };
+          }
+          return s;
+        });
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      }
+    }
+  } catch (e) {
+    console.error('Error updating local sessions with new name:', e);
+  }
+
+  // 4. Update in Firebase Firestore in the background
+  try {
+    const q = query(
+      collection(db, 'leaderboard_sessions'),
+      where('studentId', '==', currentId)
+    );
+    const snap = await getDocs(q);
+    snap.docs.forEach(async (d) => {
+      try {
+        await updateDoc(doc(db, 'leaderboard_sessions', d.id), {
+          studentName: trimmed
+        });
+      } catch {}
+    });
+  } catch (err) {
+    console.warn('Firestore name sync notice:', err.message);
+  }
+
+  // 5. Notify all components immediately with zero latency
+  try {
+    window.dispatchEvent(new CustomEvent('diploma_student_name_updated', { 
+      detail: { name: trimmed, studentId: currentId } 
+    }));
+    window.dispatchEvent(new CustomEvent('diploma_session_recorded'));
+  } catch {}
+
+  return trimmed;
 }
 
 /**

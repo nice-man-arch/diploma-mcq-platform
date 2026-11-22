@@ -44,12 +44,13 @@ export default function Leaderboard({
     // 1. Immediately reload local sessions
     setSessions(getLocalSessions());
 
-    // 2. Listen for immediate zero-latency in-app exam completion events
+    // 2. Listen for immediate zero-latency in-app exam completion and name change events
     const handleLocalUpdate = () => {
       const freshLocal = getLocalSessions();
       setSessions(freshLocal);
     };
     window.addEventListener('diploma_session_recorded', handleLocalUpdate);
+    window.addEventListener('diploma_student_name_updated', handleLocalUpdate);
     window.addEventListener('storage', handleLocalUpdate);
 
     // 3. Attach Firebase Firestore real-time subscription
@@ -101,6 +102,7 @@ export default function Leaderboard({
 
     return () => {
       window.removeEventListener('diploma_session_recorded', handleLocalUpdate);
+      window.removeEventListener('diploma_student_name_updated', handleLocalUpdate);
       window.removeEventListener('storage', handleLocalUpdate);
       try {
         unsubscribe();
@@ -141,7 +143,8 @@ export default function Leaderboard({
       
       const isCurrentUser = !isOptedOut && (
         (currId && s.studentId && s.studentId === currId) ||
-        (!s.studentId && currNameKey && name.toLowerCase() === currNameKey)
+        (!s.studentId && currNameKey && name.toLowerCase() === currNameKey) ||
+        (currNameKey && name.toLowerCase() === currNameKey)
       );
 
       // If current student has opted out, exclude their sessions from public leaderboard
@@ -149,10 +152,14 @@ export default function Leaderboard({
         return;
       }
 
+      const resolvedDisplayName = (isCurrentUser && currentStudentName && currentStudentName.trim())
+        ? currentStudentName.trim()
+        : name;
+
       const existing = studentStats.get(studentKey) || {
         id: studentKey,
         studentId: s.studentId || studentKey,
-        name,
+        name: resolvedDisplayName,
         college: s.college || 'Polytechnic Student',
         isCurrentUser: false,
         totalQuestionsAttempted: 0,
@@ -180,6 +187,9 @@ export default function Leaderboard({
 
       if (isCurrentUser) {
         existing.isCurrentUser = true;
+        if (currentStudentName && currentStudentName.trim()) {
+          existing.name = currentStudentName.trim();
+        }
       }
 
       const totalQ = (!isNaN(Number(s.totalQuestions)) && Number(s.totalQuestions) > 0) ? Number(s.totalQuestions) : 70;

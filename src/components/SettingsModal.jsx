@@ -30,6 +30,17 @@ export default function SettingsModal({
 
   if (!isOpen) return null;
 
+  const handleCloseWithSave = () => {
+    if (name.trim() && name.trim() !== currentStudentName) {
+      onUpdateSettings({
+        name: name.trim(),
+        hideLeaderboard,
+        isLeaderboardOptedOut
+      });
+    }
+    onClose();
+  };
+
   const handleSelectVisibilityMode = (optOut) => {
     onUpdateSettings({
       name: name.trim() || currentStudentName || 'Candidate',
@@ -83,7 +94,7 @@ export default function SettingsModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleCloseWithSave}
             className="p-1 rounded-sm text-zinc-500 hover:text-zinc-900 dark:text-[#9B9A97] dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-[#282828] transition-colors cursor-pointer"
           >
             <X className="h-5 w-5" />
@@ -208,7 +219,7 @@ export default function SettingsModal({
             <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-[#9B9A97]">
               Student Display Name
             </label>
-            <div className="flex gap-2">
+            <form onSubmit={handleSaveName} className="flex gap-2">
               <input
                 type="text"
                 value={name}
@@ -218,15 +229,14 @@ export default function SettingsModal({
                 className="flex-1 rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#191919] px-3 py-2 text-sm text-zinc-900 dark:text-[#E3E3E3] placeholder-zinc-400 dark:placeholder-[#6F6E6B] focus:outline-hidden focus:border-zinc-900 dark:focus:border-white transition-colors"
               />
               <button
-                type="button"
-                onClick={handleSaveName}
+                type="submit"
                 className="rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-100 dark:bg-[#282828] px-3.5 py-2 text-xs font-bold text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-[#333333] transition-colors cursor-pointer shrink-0"
               >
                 {nameSaved ? 'Saved!' : 'Update'}
               </button>
-            </div>
+            </form>
             <p className="text-xs text-zinc-500 dark:text-[#6F6E6B]">
-              Your name shown on scorecards and optional public rankings.
+              Your name shown on scorecards and public leaderboard rankings.
             </p>
           </div>
         </div>
@@ -238,7 +248,7 @@ export default function SettingsModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleCloseWithSave}
             className="rounded-sm border border-zinc-900 dark:border-white/60 bg-zinc-900 dark:bg-[#E3E3E3] px-5 py-1.5 text-xs sm:text-sm font-bold text-white dark:text-[#191919] hover:bg-zinc-800 dark:hover:bg-white transition-colors cursor-pointer shadow-xs"
           >
             Done
