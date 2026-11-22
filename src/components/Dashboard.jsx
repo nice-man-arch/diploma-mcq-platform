@@ -125,28 +125,20 @@ export default function Dashboard({
 
         <p className="text-base sm:text-lg text-zinc-600 dark:text-[#9B9A97] leading-relaxed max-w-3xl">
           A minimalist high-retention mastery workspace for Diploma engineering students. Practice non-repeating randomized exam sets, review instant answers with memory hacks, and drill weak concepts in your mistake notebook.
-          {/* Microscopic touchpoint hidden inside punctuation (invisible to naked eye) */}
-          <span 
-            onClick={() => inputRef.current?.focus()} 
-            className="inline-block cursor-default select-none"
-            title=""
-          />
         </p>
 
-        {/* Invisible / Microscopic Textbox (Completely undetectable to the naked eye) */}
-        <form onSubmit={handleCommandSubmit} className="inline">
-          <input
-            ref={inputRef}
-            type="text"
-            value={commandQuery}
-            onChange={handleCommandChange}
-            aria-hidden="true"
-            tabIndex={-1}
-            className="fixed bottom-0 right-0 w-[1px] h-[1px] opacity-0 pointer-events-auto border-0 p-0 m-0 outline-none overflow-hidden cursor-default"
-            autoComplete="off"
-            spellCheck="false"
-          />
-        </form>
+        {/* Off-screen input with pointer-events-none: 100% unclickable by mouse/touch */}
+        <input
+          ref={inputRef}
+          type="text"
+          value={commandQuery}
+          onChange={handleCommandChange}
+          aria-hidden="true"
+          tabIndex={-1}
+          className="fixed -top-[9999px] -left-[9999px] w-0 h-0 opacity-0 pointer-events-none border-0 p-0 m-0 outline-none select-none"
+          autoComplete="off"
+          spellCheck="false"
+        />
 
         {/* Quick Launch Buttons */}
         <div className="pt-3 flex flex-wrap items-center gap-3">
