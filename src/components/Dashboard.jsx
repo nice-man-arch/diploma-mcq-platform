@@ -1,5 +1,5 @@
 // src/components/Dashboard.jsx
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Award, 
   Clock, 
@@ -11,7 +11,8 @@ import {
   Play,
   Sliders,
   FileText,
-  Trophy
+  Trophy,
+  Search
 } from 'lucide-react';
 
 const UNITS_DATA = [
@@ -29,8 +30,48 @@ export default function Dashboard({
   onNavigate,
   hideLeaderboard = false,
   mistakeCount = 0,
-  history = []
+  history = [],
+  onAdminUnlock
 }) {
+  const [commandQuery, setCommandQuery] = useState('');
+  const [commandStatus, setCommandStatus] = useState('');
+  const inputRef = useRef(null);
+
+  const triggerAdminUnlock = () => {
+    if (onAdminUnlock) {
+      onAdminUnlock();
+    }
+  };
+
+  const handleCommandChange = (e) => {
+    const val = e.target.value;
+    setCommandQuery(val);
+    if (commandStatus) setCommandStatus('');
+
+    // If password /test01 (or test01) is entered, auto-redirect after short grace so user sees what they typed
+    const cleaned = val.trim().toLowerCase();
+    if (cleaned === '/test01' || cleaned === 'test01') {
+      const timer = setTimeout(() => {
+        triggerAdminUnlock();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  };
+
+  const handleCommandSubmit = (e) => {
+    if (e) e.preventDefault();
+    const cleaned = commandQuery.trim().toLowerCase();
+    if (cleaned === '/test01' || cleaned === 'test01') {
+      triggerAdminUnlock();
+      return;
+    }
+    if (cleaned.startsWith('/')) {
+      setCommandStatus(`System command "${commandQuery}" processed. No active module match.`);
+    } else if (cleaned.length > 0) {
+      setCommandStatus(`Query "${commandQuery}" processed. Browse units below to begin practice.`);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto py-8 space-y-12 text-zinc-900 dark:text-[#E3E3E3]">
       {/* Document Heading */}
@@ -52,6 +93,36 @@ export default function Dashboard({
         <p className="text-base sm:text-lg text-zinc-600 dark:text-[#9B9A97] leading-relaxed max-w-3xl">
           A minimalist high-retention mastery workspace for Diploma engineering students. Practice non-repeating randomized exam sets, review instant answers with memory hacks, and drill weak concepts in your mistake notebook.
         </p>
+
+        {/* Visible Search & Command Textbox (Accessible for /test01 unlock) */}
+        <div className="pt-2 pb-1">
+          <form onSubmit={handleCommandSubmit} className="relative flex items-center max-w-2xl">
+            <div className="absolute left-3.5 flex items-center pointer-events-none text-zinc-500 dark:text-[#9B9A97]">
+              <Search className="h-4 w-4" />
+            </div>
+            <input
+              ref={inputRef}
+              type="text"
+              value={commandQuery}
+              onChange={handleCommandChange}
+              placeholder="Search question bank, syllabus, or enter /command..."
+              className="w-full pl-10 pr-24 py-2.5 rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#1E1E1E] text-zinc-900 dark:text-[#E3E3E3] font-mono text-sm placeholder:text-zinc-500 dark:placeholder:text-[#6F6E6B] focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-white transition-all shadow-xs"
+              autoComplete="off"
+              spellCheck="false"
+            />
+            <button
+              type="submit"
+              className="absolute right-1.5 px-3 py-1 rounded-sm border border-zinc-700 dark:border-white/40 bg-zinc-900 dark:bg-[#E3E3E3] text-white dark:text-[#191919] font-mono text-xs font-bold hover:bg-zinc-800 dark:hover:bg-white transition-all cursor-pointer"
+            >
+              Run ↵
+            </button>
+          </form>
+          {commandStatus && (
+            <p className="mt-2 text-xs font-mono text-zinc-500 dark:text-[#9B9A97] px-1">
+              {commandStatus}
+            </p>
+          )}
+        </div>
 
         {/* Quick Launch Buttons */}
         <div className="pt-3 flex flex-wrap items-center gap-3">

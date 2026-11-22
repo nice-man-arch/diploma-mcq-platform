@@ -38,7 +38,8 @@ const isSecretAdminRoute = () => {
   const p = window.location.pathname.toLowerCase();
   const h = window.location.hash.toLowerCase();
   const s = window.location.search.toLowerCase();
-  return p.includes('anskey') || h.includes('anskey') || s.includes('anskey');
+  return p.includes('anskey') || h.includes('anskey') || s.includes('anskey') ||
+         p.includes('admin') || h.includes('admin') || s.includes('admin');
 };
 
 export default function App() {
@@ -381,6 +382,11 @@ export default function App() {
               hideLeaderboard={hideLeaderboard}
               mistakeCount={mistakes.length}
               history={history}
+              onAdminUnlock={() => {
+                sessionStorage.setItem('diploma_admin_auth', 'true');
+                setCurrentView('admin');
+                window.location.hash = '/anskey';
+              }}
             />
           )}
 
@@ -451,17 +457,29 @@ export default function App() {
             />
           )}
 
-          {/* Admin Panel view - Accessible ONLY via obscure route /anskey */}
+          {/* Admin Panel view - Accessible via obscure route /anskey, disguised as dashboard until /test01 is entered */}
           {currentView === 'admin' && (
             <AdminPanel
               onNavigateHome={() => {
                 window.location.hash = '';
                 if (window.history.pushState) {
-                  window.history.pushState({}, '', '/');
+                  window.history.pushState({}, '', window.location.pathname);
                 }
                 setCurrentView('home');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
+              onLaunchPreset={handleLaunchPreset}
+              onOpenCustomModal={() => handleOpenExamConfig('custom')}
+              onNavigate={(view, extra) => {
+                if (extra && extra.unit !== undefined) {
+                  setReadingInitialUnit(extra.unit);
+                }
+                setCurrentView(view);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              hideLeaderboard={hideLeaderboard}
+              mistakeCount={mistakes.length}
+              history={history}
             />
           )}
         </main>

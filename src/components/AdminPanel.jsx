@@ -29,15 +29,20 @@ import {
   exportSessionsToCSV 
 } from '../utils/sessionService';
 import StudentScorecardModal from './StudentScorecardModal';
+import Dashboard from './Dashboard';
 
-const DEFAULT_ADMIN_PIN = 'admin123';
-
-export default function AdminPanel({ onNavigateHome }) {
+export default function AdminPanel({ 
+  onNavigateHome,
+  onLaunchPreset,
+  onOpenCustomModal,
+  onNavigate,
+  hideLeaderboard,
+  mistakeCount,
+  history
+}) {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return sessionStorage.getItem('diploma_admin_auth') === 'true';
   });
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState('');
 
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -65,21 +70,12 @@ export default function AdminPanel({ onNavigateHome }) {
     }
   }, [isAuthenticated]);
 
-  const handlePinSubmit = (e) => {
-    e.preventDefault();
-    if (pinInput.trim() === DEFAULT_ADMIN_PIN) {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('diploma_admin_auth', 'true');
-      setPinError('');
-    } else {
-      setPinError('Invalid PIN code. Default PIN is admin123');
-    }
-  };
-
   const handleLogout = () => {
     setIsAuthenticated(false);
     sessionStorage.removeItem('diploma_admin_auth');
-    setPinInput('');
+    if (onNavigateHome) {
+      onNavigateHome();
+    }
   };
 
   const handleDelete = async (id, name) => {
@@ -155,61 +151,21 @@ export default function AdminPanel({ onNavigateHome }) {
     });
   }, [sessions, searchQuery, examFilter, gradeFilter]);
 
-  // If Not Authenticated -> PIN Screen
+  // If Not Authenticated -> Disguised Dashboard with visible /test01 command textbox!
   if (!isAuthenticated) {
     return (
-      <div className="max-w-md mx-auto py-16 px-4">
-        <div className="rounded-md border-2 border-zinc-900 dark:border-white/60 bg-white dark:bg-[#202020] text-zinc-900 dark:text-[#E3E3E3] p-8 space-y-6 shadow-xl text-center">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-100 dark:bg-[#191919] mx-auto text-zinc-900 dark:text-white">
-            <Lock className="h-7 w-7" />
-          </div>
-
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
-              Examiner & Admin Portal
-            </h2>
-            <p className="text-sm text-zinc-600 dark:text-[#9B9A97] mt-1.5 leading-relaxed">
-              Restricted area to monitor student names, unmasked IP addresses, and examination scores.
-            </p>
-          </div>
-
-          <form onSubmit={handlePinSubmit} className="space-y-4 text-left">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-[#9B9A97] mb-2">
-                Administrator PIN Code
-              </label>
-              <input
-                type="password"
-                required
-                autoFocus
-                placeholder="Enter PIN (Default: admin123)"
-                value={pinInput}
-                onChange={(e) => {
-                  setPinInput(e.target.value);
-                  setPinError('');
-                }}
-                className="w-full text-center font-mono tracking-widest text-lg py-2.5 px-4 rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#191919] text-zinc-900 dark:text-white focus:border-zinc-950 dark:focus:border-white focus:outline-hidden"
-              />
-              {pinError && (
-                <p className="text-xs font-bold text-rose-700 dark:text-[#D18E84] mt-2 text-center">
-                  {pinError}
-                </p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              className="w-full rounded-sm border border-zinc-900 dark:border-white/60 bg-zinc-900 dark:bg-white py-2.5 font-bold text-sm text-white dark:text-[#191919] hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
-            >
-              Access Admin Panel
-            </button>
-          </form>
-
-          <div className="pt-2 text-xs text-zinc-500 dark:text-[#6F6E6B] border-t border-zinc-800 dark:border-white/30">
-            Note: Default credentials are set to <code className="font-bold text-zinc-800 dark:text-[#E3E3E3]">admin123</code>
-          </div>
-        </div>
-      </div>
+      <Dashboard
+        onLaunchPreset={onLaunchPreset}
+        onOpenCustomModal={onOpenCustomModal}
+        onNavigate={onNavigate}
+        hideLeaderboard={hideLeaderboard}
+        mistakeCount={mistakeCount}
+        history={history}
+        onAdminUnlock={() => {
+          setIsAuthenticated(true);
+          sessionStorage.setItem('diploma_admin_auth', 'true');
+        }}
+      />
     );
   }
 
