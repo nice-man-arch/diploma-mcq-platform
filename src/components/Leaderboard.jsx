@@ -17,9 +17,11 @@ import {
   Layers,
   Target,
   Clock,
-  RotateCcw
+  RotateCcw,
+  CloudOff,
+  CloudCheck
 } from 'lucide-react';
-import { getAllStudentSessions, getLocalSessions } from '../utils/sessionService';
+import { getAllStudentSessions, getLocalSessions, syncLocalSessionsToCloud } from '../utils/sessionService';
 import { db } from '../utils/firebase';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 
@@ -33,6 +35,7 @@ export default function Leaderboard({
   const [sessions, setSessions] = useState(() => getLocalSessions());
   const [searchQuery, setSearchQuery] = useState('');
   const [examTab, setExamTab] = useState('all'); // 'all' | '70_marks' | '140_drill'
+  const [cloudSyncStatus, setCloudSyncStatus] = useState('checking'); // 'checking' | 'connected' | 'pending_setup'
 
   // Load and listen for session updates
   useEffect(() => {
@@ -40,7 +43,7 @@ export default function Leaderboard({
     setSessions(getLocalSessions());
 
     // 2. Listen for immediate zero-latency in-app exam completion events
-    const handleLocalUpdate = (e) => {
+    const handleLocalUpdate = () => {
       const freshLocal = getLocalSessions();
       setSessions(freshLocal);
     };
@@ -59,6 +62,10 @@ export default function Leaderboard({
       unsubscribe = onSnapshot(
         q,
         (snapshot) => {
+          setCloudSyncStatus('connected');
+          // Automatically sync any offline or local sessions to Cloud
+          syncLocalSessionsToCloud().catch(() => {});
+
           const remoteSessions = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -74,7 +81,8 @@ export default function Leaderboard({
           setSessions(Array.from(map.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
         },
         (err) => {
-          console.warn('Firestore live listener notice (operating in local cache mode):', err.message);
+          setCloudSyncStatus('pending_setup');
+          console.warn('Firestore live listener notice (local mode active):', err.message);
           getAllStudentSessions().then(data => {
             if (data && Array.isArray(data)) {
               setSessions(data);
@@ -83,6 +91,7 @@ export default function Leaderboard({
         }
       );
     } catch (err) {
+      setCloudSyncStatus('pending_setup');
       console.warn('Firestore listener setup fallback:', err.message);
       getAllStudentSessions().then(data => {
         if (data && Array.isArray(data)) {
@@ -141,16 +150,28 @@ export default function Leaderboard({
         lastSession: null
       };
 
-      const totalQ = Number(s.totalQuestions) || 70;
-      const maxM = Number(s.maxMarks) || totalQ;
-      const marks = Number(s.marksObtained) || 0;
-      const correct = Number(s.correctCount) != null ? Number(s.correctCount) : Math.round(marks / (Number(s.markPerQuestion) || 1));
-      const pct = Number(s.percentage) || (maxM > 0 ? Math.round((marks / maxM) * 100) : 0);
-      const acc = Number(s.accuracy) || pct;
+      const totalQ = (!isNaN(Number(s.totalQuestions)) && Number(s.totalQuestions) > 0) ? Number(s.totalQuestions) : 70;
+      const maxM = (!isNaN(Number(s.maxMarks)) && Number(s.maxMarks) > 0) ? Number(s.maxMarks) : totalQ;
+      const marks = !isNaN(Number(s.marksObtained)) ? Number(s.marksObtained) : 0;
+      
+      // Calculate questions correctly solved safely without NaN
+      let correct = 0;
+      if (s.correctCount !== undefined && s.correctCount !== null && !isNaN(Number(s.correctCount))) {
+        correct = Number(s.correctCount);
+      } else if (marks > 0) {
+        const markPerQ = (!isNaN(Number(s.markPerQuestion)) && Number(s.markPerQuestion) > 0) ? Number(s.markPerQuestion) : 1.0;
+        correct = Math.round(marks / markPerQ);
+      }
+      correct = Math.max(0, correct);
+
+      const rawPct = Number(s.percentage);
+      const pct = (!isNaN(rawPct) && rawPct >= 0) ? rawPct : (maxM > 0 ? Math.round((marks / maxM) * 100) : 0);
+      const rawAcc = Number(s.accuracy);
+      const acc = (!isNaN(rawAcc) && rawAcc >= 0) ? rawAcc : pct;
 
       existing.totalQuestionsAttempted += totalQ;
-      existing.totalQuestionsSolved += correct;
-      existing.totalMarksObtained += marks;
+      existing.totalQuestionsSolved = (Number(existing.totalQuestionsSolved) || 0) + correct;
+      existing.totalMarksObtained = Math.round(((Number(existing.totalMarksObtained) || 0) + marks) * 10) / 10;
       existing.accuracySum += acc;
       existing.examsCount += 1;
 
@@ -213,7 +234,8 @@ export default function Leaderboard({
     // Compute average accuracy
     Array.from(studentStats.values()).forEach(item => {
       item.accuracy = item.examsCount > 0 ? Math.round(item.accuracySum / item.examsCount) : 0;
-      item.totalMarksObtained = Math.round(item.totalMarksObtained * 10) / 10;
+      item.totalQuestionsSolved = Number(item.totalQuestionsSolved) || 0;
+      item.totalMarksObtained = Math.round((Number(item.totalMarksObtained) || 0) * 10) / 10;
     });
 
     return Array.from(studentStats.values());
@@ -242,10 +264,12 @@ export default function Leaderboard({
     } else {
       // Overall: sorted by total questions solved, then total marks obtained
       list.sort((a, b) => {
-        if (b.totalQuestionsSolved !== a.totalQuestionsSolved) {
-          return b.totalQuestionsSolved - a.totalQuestionsSolved;
+        const aSolved = Number(a.totalQuestionsSolved) || 0;
+        const bSolved = Number(b.totalQuestionsSolved) || 0;
+        if (bSolved !== aSolved) {
+          return bSolved - aSolved;
         }
-        return b.totalMarksObtained - a.totalMarksObtained;
+        return (Number(b.totalMarksObtained) || 0) - (Number(a.totalMarksObtained) || 0);
       });
     }
 
@@ -264,7 +288,6 @@ export default function Leaderboard({
     );
   }, [tabRankings, searchQuery]);
 
-  const topThree = tabRankings.slice(0, 3);
   const currentUserStanding = allStudentStats.find(r => r.isCurrentUser);
   const currentUserInTab = tabRankings.find(r => r.isCurrentUser);
 
@@ -312,6 +335,26 @@ export default function Leaderboard({
           </div>
         </div>
       </div>
+
+      {/* Cloud Sync Status Notice */}
+      {cloudSyncStatus === 'pending_setup' && (
+        <div className="rounded-md border border-amber-600/50 bg-amber-50/60 dark:bg-[#261E14] p-3 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-800 dark:text-[#D1B280]">
+          <div className="flex items-center gap-2.5">
+            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+            <div>
+              <span className="font-bold">Device Local Mode Active</span>: To sync exams between your phone and laptop in real-time, click <strong>"Create database"</strong> in your open Firebase Console tab (under <em>Build → Firestore Database → Start in test mode</em>).
+            </div>
+          </div>
+          <span className="text-[11px] font-mono text-zinc-500 shrink-0">Auto-merges upon creation</span>
+        </div>
+      )}
+
+      {cloudSyncStatus === 'connected' && (
+        <div className="flex items-center gap-2 text-xs font-mono text-emerald-700 dark:text-[#85B59A] bg-emerald-500/10 dark:bg-[#1D2B22] border border-emerald-600/30 px-3 py-1.5 rounded-sm">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+          <span>Live Multi-Device Cloud Sync Active — Scores sync across all mobile and desktop devices in real time.</span>
+        </div>
+      )}
 
       {/* Mindful Private Study Mode Notice (If student opted out of comparison) */}
       {isOptedOut && (
@@ -370,7 +413,7 @@ export default function Leaderboard({
                 <div className="text-xs text-zinc-600 dark:text-[#9B9A97]">
                   {currentUserStanding.examsCount === 0 
                     ? "Take a 70 Marks or 140 Questions exam to record your first points!" 
-                    : `${currentUserStanding.examsCount} tests completed • ${currentUserStanding.accuracy}% overall accuracy`}
+                    : `${currentUserStanding.examsCount} tests completed • ${currentUserStanding.accuracy || 0}% overall accuracy`}
                 </div>
               </div>
             </div>
@@ -379,13 +422,13 @@ export default function Leaderboard({
               <div>
                 <div className="text-xs font-bold text-zinc-500 uppercase">Total Questions Solved</div>
                 <div className="text-2xl font-mono font-extrabold text-zinc-900 dark:text-white">
-                  {currentUserStanding.totalQuestionsSolved} Qs
+                  {Number(currentUserStanding.totalQuestionsSolved) || 0} Qs
                 </div>
               </div>
               <div className="border-l border-zinc-300 dark:border-zinc-700 pl-4">
                 <div className="text-xs font-bold text-zinc-500 uppercase">Total Points</div>
                 <div className="text-2xl font-mono font-extrabold text-amber-600 dark:text-[#D1B280]">
-                  {currentUserStanding.totalMarksObtained}
+                  {Number(currentUserStanding.totalMarksObtained) || 0}
                 </div>
               </div>
             </div>
@@ -400,7 +443,7 @@ export default function Leaderboard({
               </div>
               <span className="font-mono font-bold text-zinc-900 dark:text-white">
                 {currentUserStanding.count70 > 0 
-                  ? `${currentUserStanding.best70Solved} / 70 Solved (${currentUserStanding.best70Marks}/70 M)`
+                  ? `${currentUserStanding.best70Solved || 0} / 70 Solved (${currentUserStanding.best70Marks || 0}/70 M)`
                   : 'Not Attempted Yet'}
               </span>
             </div>
@@ -412,7 +455,7 @@ export default function Leaderboard({
               </div>
               <span className="font-mono font-bold text-zinc-900 dark:text-white">
                 {currentUserStanding.count140 > 0 
-                  ? `${currentUserStanding.best140Solved} / 140 Solved (${currentUserStanding.best140Marks}/${currentUserStanding.best140MaxMarks} M)`
+                  ? `${currentUserStanding.best140Solved || 0} / 140 Solved (${currentUserStanding.best140Marks || 0}/${currentUserStanding.best140MaxMarks || 70} M)`
                   : 'Not Attempted Yet'}
               </span>
             </div>
@@ -580,12 +623,12 @@ export default function Leaderboard({
                           <>
                             {student.count70 > 0 && (
                               <span className="rounded-xs border border-emerald-800/40 dark:border-white/30 bg-emerald-50 dark:bg-[#202B24] px-1.5 py-0.2 text-[10px] font-mono text-emerald-800 dark:text-[#85B59A]">
-                                70M: {student.best70Solved}/70
+                                70M: {student.best70Solved || 0}/70
                               </span>
                             )}
                             {student.count140 > 0 && (
                               <span className="rounded-xs border border-sky-800/40 dark:border-white/30 bg-sky-50 dark:bg-[#1E2933] px-1.5 py-0.2 text-[10px] font-mono text-sky-800 dark:text-[#8FAFC4]">
-                                140Q: {student.best140Solved}/140
+                                140Q: {student.best140Solved || 0}/140
                               </span>
                             )}
                           </>
@@ -597,14 +640,14 @@ export default function Leaderboard({
                     {examTab === '70_marks' && (
                       <>
                         <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-zinc-900 dark:text-white">
-                          {student.best70Solved} / 70 Solved
+                          {student.best70Solved || 0} / 70 Solved
                         </td>
                         <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-amber-600 dark:text-[#D1B280]">
-                          {student.best70Marks} / 70 M
+                          {student.best70Marks || 0} / 70 M
                         </td>
                         <td className="py-3.5 px-4 text-center">
                           <span className="rounded-sm border border-emerald-800/40 dark:border-white/30 bg-emerald-50 dark:bg-[#191919] px-2 py-0.5 text-xs font-mono font-bold text-emerald-800 dark:text-[#85B59A]">
-                            {student.best70Percentage}%
+                            {student.best70Percentage || 0}%
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right font-mono text-zinc-600 dark:text-[#9B9A97]">
@@ -617,14 +660,14 @@ export default function Leaderboard({
                     {examTab === '140_drill' && (
                       <>
                         <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-zinc-900 dark:text-white">
-                          {student.best140Solved} / 140 Solved
+                          {student.best140Solved || 0} / 140 Solved
                         </td>
                         <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-amber-600 dark:text-[#D1B280]">
-                          {student.best140Marks} / {student.best140MaxMarks} M
+                          {student.best140Marks || 0} / {student.best140MaxMarks || 70} M
                         </td>
                         <td className="py-3.5 px-4 text-center">
                           <span className="rounded-sm border border-sky-800/40 dark:border-white/30 bg-sky-50 dark:bg-[#191919] px-2 py-0.5 text-xs font-mono font-bold text-sky-800 dark:text-[#8FAFC4]">
-                            {student.best140Percentage}%
+                            {student.best140Percentage || 0}%
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right font-mono text-zinc-600 dark:text-[#9B9A97]">
@@ -637,14 +680,14 @@ export default function Leaderboard({
                     {examTab === 'all' && (
                       <>
                         <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-zinc-900 dark:text-white">
-                          {student.totalQuestionsSolved} Qs
+                          {Number(student.totalQuestionsSolved) || 0} Qs
                         </td>
                         <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-amber-600 dark:text-[#D1B280]">
-                          {student.totalMarksObtained}
+                          {Number(student.totalMarksObtained) || 0}
                         </td>
                         <td className="py-3.5 px-4 text-center">
                           <span className="rounded-sm border border-zinc-800 dark:border-white/30 bg-zinc-100 dark:bg-[#191919] px-2 py-0.5 text-xs font-mono font-bold">
-                            {student.accuracy}%
+                            {student.accuracy || 0}%
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right font-mono text-zinc-600 dark:text-[#9B9A97]">

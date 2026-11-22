@@ -6,6 +6,15 @@ const LOCAL_STORAGE_KEY = 'diploma_student_sessions';
 const STUDENT_PROFILE_KEY = 'diploma_current_student_profile';
 
 /**
+ * Helper to safely extract a non-NaN number
+ */
+function safeNumber(val, fallback = 0) {
+  if (val === null || val === undefined) return fallback;
+  const num = Number(val);
+  return isNaN(num) ? fallback : num;
+}
+
+/**
  * Get cached student profile
  */
 export function getSavedStudentProfile() {
@@ -36,17 +45,19 @@ export async function recordStudentSession(sessionData) {
   const resolvedName = isOptedOut ? 'Anonymous Scholar' : (sessionData.studentName || 'Scholar');
 
   // Detect exam format / tier
-  const totalQ = Number(sessionData.totalQuestions) || 70;
-  const markPerQ = Number(sessionData.markPerQuestion) || 1.0;
-  const maxM = Number(sessionData.maxMarks) || (totalQ === 140 && markPerQ === 0.5 ? 70 : totalQ);
-  
-  // Calculate correct questions solved
+  const totalQ = safeNumber(sessionData.totalQuestions, 70);
+  const markPerQ = safeNumber(sessionData.markPerQuestion, 1.0) || 1.0;
+  const maxM = safeNumber(sessionData.maxMarks, (totalQ === 140 && markPerQ === 0.5 ? 70 : totalQ));
+  const marks = safeNumber(sessionData.marksObtained, 0);
+
+  // Calculate correct questions solved safely (never NaN)
   let correct = 0;
-  if (sessionData.correctCount != null) {
+  if (sessionData.correctCount !== undefined && sessionData.correctCount !== null && !isNaN(Number(sessionData.correctCount))) {
     correct = Number(sessionData.correctCount);
-  } else if (sessionData.marksObtained != null && markPerQ > 0) {
-    correct = Math.round(Number(sessionData.marksObtained) / markPerQ);
+  } else if (marks > 0 && markPerQ > 0) {
+    correct = Math.round(marks / markPerQ);
   }
+  correct = Math.max(0, correct);
 
   let examType = 'custom';
   if (totalQ === 70) {
@@ -65,13 +76,13 @@ export async function recordStudentSession(sessionData) {
     examType,
     totalQuestions: totalQ,
     correctCount: correct,
-    wrongCount: Number(sessionData.wrongCount) || 0,
-    unattemptedCount: Number(sessionData.unattemptedCount) || 0,
+    wrongCount: safeNumber(sessionData.wrongCount, 0),
+    unattemptedCount: safeNumber(sessionData.unattemptedCount, 0),
     maxMarks: maxM,
-    marksObtained: Number(sessionData.marksObtained) || 0,
+    marksObtained: marks,
     markPerQuestion: markPerQ,
-    percentage: Number(sessionData.percentage) || 0,
-    accuracy: Number(sessionData.accuracy) || 0,
+    percentage: safeNumber(sessionData.percentage, maxM > 0 ? Math.round((marks / maxM) * 100) : 0),
+    accuracy: safeNumber(sessionData.accuracy, 0),
     timestamp: new Date().toISOString()
   };
 
@@ -122,7 +133,7 @@ export async function recordStudentSession(sessionData) {
 }
 
 /**
- * Get sessions from localStorage and merged past test histories
+ * Get sessions from localStorage and merged past test histories, sanitized against NaN
  */
 export function getLocalSessions() {
   const map = new Map();
@@ -135,7 +146,24 @@ export function getLocalSessions() {
       if (Array.isArray(parsed)) {
         parsed.forEach(s => {
           if (s && (s.id || s.timestamp)) {
-            map.set(s.id || s.timestamp, s);
+            const marks = safeNumber(s.marksObtained, 0);
+            const markPerQ = safeNumber(s.markPerQuestion, 1.0) || 1.0;
+            let correct = 0;
+            if (s.correctCount !== undefined && s.correctCount !== null && !isNaN(Number(s.correctCount))) {
+              correct = Number(s.correctCount);
+            } else if (marks > 0 && markPerQ > 0) {
+              correct = Math.round(marks / markPerQ);
+            }
+
+            map.set(s.id || s.timestamp, {
+              ...s,
+              totalQuestions: safeNumber(s.totalQuestions, 70),
+              correctCount: Math.max(0, correct),
+              marksObtained: marks,
+              maxMarks: safeNumber(s.maxMarks, 70),
+              percentage: safeNumber(s.percentage, 0),
+              accuracy: safeNumber(s.accuracy, 0)
+            });
           }
         });
       }
@@ -152,9 +180,16 @@ export function getLocalSessions() {
         hist.forEach(h => {
           const key = `hist_${h.id || h.timestamp}`;
           if (!map.has(key)) {
-            const totalQ = Number(h.totalQuestions) || 70;
-            const maxM = Number(h.maxMarks) || totalQ;
-            const correct = Number(h.correctCount) != null ? Number(h.correctCount) : Math.round(Number(h.marksObtained) || 0);
+            const totalQ = safeNumber(h.totalQuestions, 70);
+            const maxM = safeNumber(h.maxMarks, totalQ);
+            const marks = safeNumber(h.marksObtained, 0);
+            let correct = 0;
+            if (h.correctCount !== undefined && h.correctCount !== null && !isNaN(Number(h.correctCount))) {
+              correct = Number(h.correctCount);
+            } else if (marks > 0) {
+              correct = Math.round(marks);
+            }
+
             let examType = 'custom';
             if (totalQ === 70) examType = '70_marks';
             else if (totalQ === 140) examType = maxM === 140 ? '140_full' : '140_half';
@@ -167,14 +202,14 @@ export function getLocalSessions() {
               examTitle: h.title || (totalQ === 140 ? '140 Questions Drill' : '70 Marks Board Exam'),
               examType,
               totalQuestions: totalQ,
-              correctCount: correct,
-              wrongCount: Number(h.wrongCount) || 0,
-              unattemptedCount: Number(h.unattemptedCount) || 0,
+              correctCount: Math.max(0, correct),
+              wrongCount: safeNumber(h.wrongCount, 0),
+              unattemptedCount: safeNumber(h.unattemptedCount, 0),
               maxMarks: maxM,
-              marksObtained: Number(h.marksObtained) || 0,
+              marksObtained: marks,
               markPerQuestion: maxM === 70 && totalQ === 140 ? 0.5 : 1.0,
-              percentage: Number(h.percentage) || 0,
-              accuracy: Number(h.accuracy) || 0,
+              percentage: safeNumber(h.percentage, 0),
+              accuracy: safeNumber(h.accuracy, 0),
               timestamp: h.timestamp ? new Date(h.timestamp).toISOString() : (h.id ? new Date(h.id).toISOString() : new Date().toISOString())
             });
           }
@@ -202,10 +237,28 @@ export async function getAllStudentSessions() {
       );
       const snap = await getDocs(q);
       if (!snap.empty) {
-        return snap.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        return snap.docs.map(doc => {
+          const d = doc.data();
+          const marks = safeNumber(d.marksObtained, 0);
+          const markPerQ = safeNumber(d.markPerQuestion, 1.0) || 1.0;
+          let correct = 0;
+          if (d.correctCount !== undefined && d.correctCount !== null && !isNaN(Number(d.correctCount))) {
+            correct = Number(d.correctCount);
+          } else if (marks > 0 && markPerQ > 0) {
+            correct = Math.round(marks / markPerQ);
+          }
+
+          return {
+            id: doc.id,
+            ...d,
+            totalQuestions: safeNumber(d.totalQuestions, 70),
+            correctCount: Math.max(0, correct),
+            marksObtained: marks,
+            maxMarks: safeNumber(d.maxMarks, 70),
+            percentage: safeNumber(d.percentage, 0),
+            accuracy: safeNumber(d.accuracy, 0)
+          };
+        });
       }
       return [];
     })();
@@ -230,6 +283,50 @@ export async function getAllStudentSessions() {
 }
 
 /**
+ * Automatically sync un-uploaded local sessions to Cloud Firestore when database is active
+ */
+export async function syncLocalSessionsToCloud() {
+  const local = getLocalSessions();
+  if (!local || local.length === 0) return 0;
+
+  let syncedCount = 0;
+  for (const s of local) {
+    if (!s.firebaseSynced && !s.firebaseId) {
+      try {
+        const docRef = await addDoc(collection(db, 'leaderboard_sessions'), {
+          studentName: s.studentName,
+          college: s.college || 'Polytechnic Student',
+          examTitle: s.examTitle,
+          examType: s.examType,
+          totalQuestions: s.totalQuestions,
+          correctCount: s.correctCount || 0,
+          wrongCount: s.wrongCount || 0,
+          unattemptedCount: s.unattemptedCount || 0,
+          maxMarks: s.maxMarks,
+          marksObtained: s.marksObtained,
+          markPerQuestion: s.markPerQuestion || 1.0,
+          percentage: s.percentage,
+          accuracy: s.accuracy,
+          timestamp: s.timestamp
+        });
+        s.firebaseSynced = true;
+        s.firebaseId = docRef.id;
+        syncedCount++;
+      } catch (err) {
+        break; // Stop if Firestore rejects or API disabled
+      }
+    }
+  }
+
+  if (syncedCount > 0) {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(local));
+    } catch {}
+  }
+  return syncedCount;
+}
+
+/**
  * Delete a session
  */
 export async function deleteStudentSession(id) {
@@ -250,49 +347,4 @@ export async function clearAllStudentSessions() {
   } catch {}
 
   return true;
-}
-
-/**
- * Export sessions as CSV file
- */
-export function exportSessionsToCSV(sessions = []) {
-  if (!sessions || sessions.length === 0) {
-    alert('No student test records to export.');
-    return;
-  }
-
-  const headers = [
-    'Date & Time',
-    'Student Name',
-    'College',
-    'Exam Format',
-    'Total Questions',
-    'Solved Correctly',
-    'Marks Obtained',
-    'Max Marks',
-    'Percentage',
-    'Accuracy'
-  ];
-
-  const rows = sessions.map(s => [
-    s.timestamp ? new Date(s.timestamp).toLocaleString('en-IN') : 'N/A',
-    `"${(s.studentName || 'Scholar').replace(/"/g, '""')}"`,
-    `"${(s.college || 'Polytechnic Student').replace(/"/g, '""')}"`,
-    `"${(s.examTitle || (s.totalQuestions === 140 ? '140 Questions Drill' : '70 Marks Exam')).replace(/"/g, '""')}"`,
-    s.totalQuestions || 0,
-    s.correctCount || 0,
-    s.marksObtained || 0,
-    s.maxMarks || (s.totalQuestions || 70),
-    `${s.percentage || 0}%`,
-    `${s.accuracy || 0}%`
-  ]);
-
-  const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `diploma_leaderboard_sessions_${Date.now()}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
 }
