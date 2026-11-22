@@ -15,7 +15,9 @@ import {
   EyeOff,
   HeartHandshake
 } from 'lucide-react';
-import { getAllStudentSessions } from '../utils/sessionService';
+import { getAllStudentSessions, getLocalSessions } from '../utils/sessionService';
+import { db } from '../utils/firebase';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 
 export default function Leaderboard({ 
   currentStudentName, 
@@ -24,15 +26,59 @@ export default function Leaderboard({
   onToggleOptOut,
   onOpenSettings 
 }) {
-  const [sessions, setSessions] = useState([]);
+  const [sessions, setSessions] = useState(() => getLocalSessions());
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    getAllStudentSessions().then(data => {
-      if (data && Array.isArray(data)) {
-        setSessions(data);
-      }
-    });
+    let unsubscribe = () => {};
+
+    try {
+      const q = query(
+        collection(db, 'leaderboard_sessions'),
+        orderBy('timestamp', 'desc'),
+        limit(150)
+      );
+
+      unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const remoteSessions = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+
+          const local = getLocalSessions();
+          const map = new Map();
+          remoteSessions.forEach(s => map.set(s.id || s.timestamp, s));
+          local.forEach(s => {
+            if (!map.has(s.id)) map.set(s.id, s);
+          });
+
+          setSessions(Array.from(map.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+        },
+        (err) => {
+          console.warn('Real-time sync notice, fetching via standard query:', err.message);
+          getAllStudentSessions().then(data => {
+            if (data && Array.isArray(data)) {
+              setSessions(data);
+            }
+          });
+        }
+      );
+    } catch (err) {
+      console.warn('Firestore subscription fallback:', err.message);
+      getAllStudentSessions().then(data => {
+        if (data && Array.isArray(data)) {
+          setSessions(data);
+        }
+      });
+    }
+
+    return () => {
+      try {
+        unsubscribe();
+      } catch {}
+    };
   }, []);
 
   // Compute live ranking table strictly from actual student exam sessions

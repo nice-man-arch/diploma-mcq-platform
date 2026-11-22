@@ -1,6 +1,8 @@
 // src/utils/sessionService.js
+import { db } from './firebase';
+import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 
-const LOCAL_STORAGE_KEY = 'diploma_admin_student_sessions';
+const LOCAL_STORAGE_KEY = 'diploma_student_sessions';
 const STUDENT_PROFILE_KEY = 'diploma_current_student_profile';
 
 /**
@@ -27,16 +29,24 @@ export function saveStudentProfile(profile) {
 }
 
 /**
- * Save a completed student exam session to backend API & localStorage
+ * Save a completed student exam session to Firebase Firestore & local storage
  */
 export async function recordStudentSession(sessionData) {
+  const isOptedOut = localStorage.getItem('diploma_leaderboard_opt_out') === 'true';
+  const resolvedName = isOptedOut ? 'Anonymous Scholar' : (sessionData.studentName || 'Scholar');
+
   const sessionRecord = {
     id: `sess_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-    timestamp: new Date().toISOString(),
-    ...sessionData
+    studentName: resolvedName,
+    totalQuestions: Number(sessionData.totalQuestions) || 0,
+    marksObtained: Number(sessionData.marksObtained) || 0,
+    percentage: Number(sessionData.percentage) || 0,
+    accuracy: Number(sessionData.accuracy) || 0,
+    examPreset: sessionData.examPreset || 'Practice Exam',
+    timestamp: new Date().toISOString()
   };
 
-  // 1. Save to localStorage cache immediately
+  // 1. Cache to local storage immediately
   try {
     const current = getLocalSessions();
     const updated = [sessionRecord, ...current];
@@ -45,56 +55,56 @@ export async function recordStudentSession(sessionData) {
     console.error('LocalStorage write error:', e);
   }
 
-  // 2. Send to backend endpoint /api/sessions
+  // 2. Sync to Firebase Firestore cloud database (Shared across all students)
   try {
-    const res = await fetch('/api/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sessionRecord),
-      signal: AbortSignal.timeout(4000)
+    const docRef = await addDoc(collection(db, 'leaderboard_sessions'), {
+      studentName: sessionRecord.studentName,
+      totalQuestions: sessionRecord.totalQuestions,
+      marksObtained: sessionRecord.marksObtained,
+      percentage: sessionRecord.percentage,
+      accuracy: sessionRecord.accuracy,
+      examPreset: sessionRecord.examPreset,
+      timestamp: sessionRecord.timestamp
     });
-    if (res.ok) {
-      const saved = await res.json();
-      return saved;
-    }
-  } catch (err) {
-    console.warn('Backend /api/sessions offline, session preserved in localStorage cache:', err.message);
+    sessionRecord.firebaseId = docRef.id;
+  } catch (firebaseErr) {
+    console.warn('Firebase cloud sync note (saved locally):', firebaseErr.message);
   }
 
   return sessionRecord;
 }
 
 /**
- * Fetch all recorded sessions for the Admin Panel
+ * Fetch all recorded sessions from Firebase Cloud Database & local storage
  */
 export async function getAllStudentSessions() {
-  let serverSessions = null;
-
-  // Try fetching from backend API
-  try {
-    const res = await fetch('/api/sessions', { signal: AbortSignal.timeout(3000) });
-    if (res.ok) {
-      serverSessions = await res.json();
-    }
-  } catch (e) {
-    // API not available, will use localStorage
-  }
-
   const localSessions = getLocalSessions();
 
-  if (serverSessions && Array.isArray(serverSessions)) {
-    // Merge server and local by ID
-    const map = new Map();
-    serverSessions.forEach(s => map.set(s.id, s));
-    localSessions.forEach(s => {
-      if (!map.has(s.id)) map.set(s.id, s);
-    });
-    const merged = Array.from(map.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    // sync back to local storage
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));
-    } catch {}
-    return merged;
+  // Try fetching shared sessions from Firebase Firestore
+  try {
+    const q = query(
+      collection(db, 'leaderboard_sessions'),
+      orderBy('timestamp', 'desc'),
+      limit(150)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const remoteSessions = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      // Merge remote cloud sessions with local session cache
+      const map = new Map();
+      remoteSessions.forEach(s => map.set(s.id || s.timestamp, s));
+      localSessions.forEach(s => {
+        if (!map.has(s.id)) map.set(s.id, s);
+      });
+
+      return Array.from(map.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
+  } catch (err) {
+    console.warn('Firebase query fallback to local:', err.message);
   }
 
   return localSessions;
@@ -103,7 +113,7 @@ export async function getAllStudentSessions() {
 /**
  * Get sessions from localStorage
  */
-function getLocalSessions() {
+export function getLocalSessions() {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
