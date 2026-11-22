@@ -6,15 +6,13 @@ import {
   Flame, 
   ChevronRight,
   Sun,
-  Moon,
-  Settings
+  Moon
 } from 'lucide-react';
 
 export default function Navbar({
   currentView,
   onToggleSidebar,
   onOpenExamConfig,
-  onOpenSettings,
   activeExamTitle,
   mistakeCount = 0,
   theme = 'dark',
@@ -68,16 +66,6 @@ export default function Navbar({
               <span className="hidden sm:inline">Dark</span>
             </>
           )}
-        </button>
-
-        {/* Study & Privacy Settings */}
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          title="Study & Privacy Settings"
-          className="rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#202020] p-1.5 text-zinc-700 dark:text-[#E3E3E3] hover:bg-zinc-200 dark:hover:bg-[#282828] transition-colors flex items-center justify-center cursor-pointer"
-        >
-          <Settings className="h-4 w-4" />
         </button>
 
         {mistakeCount > 0 && currentView !== 'mistakes' && (

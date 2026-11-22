@@ -43,36 +43,39 @@ export default function Sidebar({
       )}
 
       <aside
-        className={`fixed top-0 left-0 z-50 h-screen w-72 bg-white dark:bg-[#202020] border-r border-zinc-800 dark:border-white/45 flex flex-col transition-transform duration-200 ease-in-out md:static ${
-          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 md:w-72'
+        className={`fixed top-0 left-0 z-50 h-screen bg-white dark:bg-[#202020] border-r border-zinc-800 dark:border-white/45 flex flex-col transition-all duration-200 ease-in-out md:static shrink-0 overflow-hidden ${
+          isOpen 
+            ? 'w-72 translate-x-0 opacity-100' 
+            : 'w-0 -translate-x-full md:translate-x-0 opacity-0 border-r-0 pointer-events-none'
         }`}
       >
-        {/* Workspace Brand / Header */}
-        <div className="h-14 px-4 border-b border-zinc-800 dark:border-white/45 flex items-center justify-between">
-          <div 
-            onClick={() => onNavigate('home')} 
-            className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition-opacity"
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-sm bg-zinc-100 dark:bg-[#2A2A2A] border border-zinc-800 dark:border-white/45 text-zinc-900 dark:text-[#E3E3E3]">
-              <GraduationCap className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-zinc-900 dark:text-[#E3E3E3] tracking-tight">
-                Applied Science
+        <div className="w-72 h-full flex flex-col">
+          {/* Workspace Brand / Header */}
+          <div className="h-14 px-4 border-b border-zinc-800 dark:border-white/45 flex items-center justify-between shrink-0">
+            <div 
+              onClick={() => onNavigate('home')} 
+              className="flex items-center gap-2.5 cursor-pointer hover:opacity-85 transition-opacity"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-sm bg-zinc-100 dark:bg-[#2A2A2A] border border-zinc-800 dark:border-white/45 text-zinc-900 dark:text-[#E3E3E3]">
+                <GraduationCap className="h-5 w-5" />
               </div>
-              <div className="text-xs text-zinc-500 dark:text-[#9B9A97]">Diploma MCQ Bank</div>
+              <div>
+                <div className="text-sm font-bold text-zinc-900 dark:text-[#E3E3E3] tracking-tight">
+                  Applied Science
+                </div>
+                <div className="text-xs text-zinc-500 dark:text-[#9B9A97]">Diploma MCQ Bank</div>
+              </div>
             </div>
-          </div>
 
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            title="Toggle Sidebar"
-            className="rounded-sm p-1.5 text-zinc-600 dark:text-[#9B9A97] hover:text-zinc-900 dark:hover:text-[#E3E3E3] hover:bg-zinc-100 dark:hover:bg-[#262626] transition-colors md:hidden"
-          >
-            <PanelLeftClose className="h-4 w-4" />
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              title="Collapse Sidebar"
+              className="rounded-sm p-1.5 text-zinc-600 dark:text-[#9B9A97] hover:text-zinc-900 dark:hover:text-[#E3E3E3] hover:bg-zinc-100 dark:hover:bg-[#262626] transition-colors cursor-pointer md:hidden"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          </div>
 
         {/* Navigation Content */}
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
@@ -229,7 +232,7 @@ export default function Sidebar({
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-3 border-t border-zinc-800 dark:border-white/45">
+        <div className="p-3 border-t border-zinc-800 dark:border-white/45 shrink-0">
           <button
             type="button"
             onClick={() => onOpenExamConfig('70_marks')}
@@ -238,6 +241,7 @@ export default function Sidebar({
             <Plus className="h-4 w-4" />
             <span>New Exam Session</span>
           </button>
+        </div>
         </div>
       </aside>
     </>

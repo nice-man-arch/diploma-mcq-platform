@@ -79,6 +79,7 @@ export default function Leaderboard({
   currentStudentName, 
   onLaunchExam, 
   isOptedOut = false,
+  onToggleOptOut,
   onOpenSettings 
 }) {
   const [sessions, setSessions] = useState([]);
@@ -245,15 +246,26 @@ export default function Leaderboard({
               </div>
             </div>
           </div>
-          {onOpenSettings && (
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              className="text-xs font-semibold text-emerald-700 dark:text-[#85B59A] hover:underline cursor-pointer shrink-0"
-            >
-              Adjust in Settings →
-            </button>
-          )}
+          <div className="flex items-center gap-2.5 shrink-0">
+            {onToggleOptOut && (
+              <button
+                type="button"
+                onClick={onToggleOptOut}
+                className="rounded-sm border border-emerald-800 dark:border-white/50 bg-emerald-700 dark:bg-[#24332C] px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 dark:hover:bg-[#2f4339] transition-colors cursor-pointer shadow-xs"
+              >
+                Turn Off Private Mode
+              </button>
+            )}
+            {onOpenSettings && (
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className="text-xs font-semibold text-emerald-700 dark:text-[#85B59A] hover:underline cursor-pointer"
+              >
+                Preferences →
+              </button>
+            )}
+          </div>
         </div>
       )}
 

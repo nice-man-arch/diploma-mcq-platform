@@ -45,7 +45,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState(() => {
     return isSecretAdminRoute() ? 'admin' : 'home';
   });
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Theme setup
   const [theme, setTheme] = useState(() => {
@@ -359,7 +359,6 @@ export default function App() {
           currentView={currentView}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           onOpenExamConfig={handleOpenExamConfig}
-          onOpenSettings={() => setIsSettingsOpen(true)}
           activeExamTitle={activeExamTitle}
           mistakeCount={mistakes.length}
           theme={theme}
@@ -443,6 +442,11 @@ export default function App() {
               currentStudentName={localStorage.getItem('diploma_student_name') || currentStudent?.name}
               onLaunchExam={() => handleLaunchPreset('70_marks')}
               isOptedOut={isLeaderboardOptedOut}
+              onToggleOptOut={() => {
+                const nextVal = !isLeaderboardOptedOut;
+                localStorage.setItem('diploma_leaderboard_opt_out', nextVal ? 'true' : 'false');
+                setIsLeaderboardOptedOut(nextVal);
+              }}
               onOpenSettings={() => setIsSettingsOpen(true)}
             />
           )}
