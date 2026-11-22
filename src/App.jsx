@@ -55,6 +55,15 @@ export default function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
+  // Clean URL: Strip any residual hash or parameters so URL stays strictly clean
+  useEffect(() => {
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    sessionStorage.removeItem('diploma_admin_auth');
+    localStorage.removeItem('diploma_admin_auth');
+  }, []);
+
   // First boot check: Prompt for student name ONLY on the very first visit
   const [isFirstBoot, setIsFirstBoot] = useState(() => {
     return !localStorage.getItem('diploma_student_name');
@@ -430,7 +439,7 @@ export default function App() {
             />
           )}
 
-          {/* Admin Panel view - Unlocked only via desktop keystroke /test01 */}
+          {/* Admin Panel view - Accessible strictly via keyboard command /test01 */}
           {currentView === 'admin' && (
             <AdminPanel
               onNavigateHome={() => {

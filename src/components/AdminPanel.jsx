@@ -40,7 +40,7 @@ export default function AdminPanel({
   mistakeCount,
   history
 }) {
-  // Always start locked (false) in memory. No persistent token so putting #anskey can NEVER bypass security.
+  // Always start locked (false) in memory. Strictly requires typing /test01 + Enter on keyboard.
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
