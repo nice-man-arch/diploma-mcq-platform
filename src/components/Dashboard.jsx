@@ -37,6 +37,11 @@ export default function Dashboard({
   const inputRef = useRef(null);
 
   const triggerAdminUnlock = () => {
+    // Strictly block admin access on mobile / touch screens
+    const isMobileDevice = window.innerWidth < 768 || ('ontouchstart' in window && !window.matchMedia('(pointer: fine)').matches);
+    if (isMobileDevice) {
+      return;
+    }
     if (onAdminUnlock) {
       onAdminUnlock();
     }

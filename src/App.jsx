@@ -33,19 +33,8 @@ import {
 } from './utils/sessionService';
 import { detectStudentLocation } from './utils/locationService';
 
-// Helper to detect secret admin route in URL
-const isSecretAdminRoute = () => {
-  const p = window.location.pathname.toLowerCase();
-  const h = window.location.hash.toLowerCase();
-  const s = window.location.search.toLowerCase();
-  return p.includes('anskey') || h.includes('anskey') || s.includes('anskey') ||
-         p.includes('admin') || h.includes('admin') || s.includes('admin');
-};
-
 export default function App() {
-  const [currentView, setCurrentView] = useState(() => {
-    return isSecretAdminRoute() ? 'admin' : 'home';
-  });
+  const [currentView, setCurrentView] = useState('home');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Theme setup
@@ -65,31 +54,6 @@ export default function App() {
   const handleToggleTheme = () => {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
-
-  // Listen for obscure URL navigation (e.g. /anskey or #/anskey)
-  useEffect(() => {
-    // Clear residual storage on load so #anskey can NEVER bypass security
-    sessionStorage.removeItem('diploma_admin_auth');
-    localStorage.removeItem('diploma_admin_auth');
-
-    const handleUrlChange = () => {
-      if (isSecretAdminRoute()) {
-        setCurrentView('admin');
-        if (window.location.hash) {
-          window.history.replaceState(null, '', window.location.pathname);
-        }
-      }
-    };
-    if (isSecretAdminRoute()) {
-      handleUrlChange();
-    }
-    window.addEventListener('popstate', handleUrlChange);
-    window.addEventListener('hashchange', handleUrlChange);
-    return () => {
-      window.removeEventListener('popstate', handleUrlChange);
-      window.removeEventListener('hashchange', handleUrlChange);
-    };
-  }, []);
 
   // First boot check: Prompt for student name ONLY on the very first visit
   const [isFirstBoot, setIsFirstBoot] = useState(() => {
@@ -395,7 +359,6 @@ export default function App() {
               onAdminUnlock={() => {
                 sessionStorage.setItem('diploma_admin_auth', 'true');
                 setCurrentView('admin');
-                window.location.hash = '/anskey';
               }}
             />
           )}
@@ -467,14 +430,10 @@ export default function App() {
             />
           )}
 
-          {/* Admin Panel view - Accessible via obscure route /anskey, disguised as dashboard until /test01 is entered */}
+          {/* Admin Panel view - Unlocked only via desktop keystroke /test01 */}
           {currentView === 'admin' && (
             <AdminPanel
               onNavigateHome={() => {
-                window.location.hash = '';
-                if (window.history.pushState) {
-                  window.history.pushState({}, '', window.location.pathname);
-                }
                 setCurrentView('home');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
