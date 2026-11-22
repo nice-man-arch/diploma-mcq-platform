@@ -65,9 +65,6 @@ export default function Leaderboard({
         q,
         (snapshot) => {
           setCloudSyncStatus('connected');
-          // Automatically sync any offline or local sessions to Cloud
-          syncLocalSessionsToCloud().catch(() => {});
-
           const remoteSessions = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -117,7 +114,27 @@ export default function Leaderboard({
     const currId = resolvedStudentId;
     const currNameKey = currentStudentName ? currentStudentName.toLowerCase().trim() : '';
 
+    // Deduplicate sessions (collapses any duplicate uploads or rapid sync loop repeats)
+    const seenSessions = new Set();
+    const deduplicatedSessions = [];
+
     sessions.forEach(s => {
+      if (!s) return;
+      const totalQ = (!isNaN(Number(s.totalQuestions)) && Number(s.totalQuestions) > 0) ? Number(s.totalQuestions) : 70;
+      const marks = !isNaN(Number(s.marksObtained)) ? Number(s.marksObtained) : 0;
+      const idKey = s.studentId || (s.studentName || 'Scholar').toLowerCase().trim();
+      const examTitle = s.examTitle || '';
+      // Group by 10-minute time window to merge identical duplicate sync sessions
+      const timeWindow = s.timestamp ? Math.floor(new Date(s.timestamp).getTime() / (10 * 60 * 1000)) : 0;
+      
+      const sig = `${idKey}_${examTitle}_${totalQ}_${marks}_${timeWindow}`;
+      if (!seenSessions.has(sig)) {
+        seenSessions.add(sig);
+        deduplicatedSessions.push(s);
+      }
+    });
+
+    deduplicatedSessions.forEach(s => {
       const name = s.studentName ? s.studentName.trim() : 'Scholar';
       // Identify each student by studentId to allow multiple people to share the exact same name
       const studentKey = s.studentId || (s.id ? `sess_${s.id}` : `sess_${name}_${s.timestamp}`);

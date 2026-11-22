@@ -307,49 +307,80 @@ export async function getAllStudentSessions() {
   return localSessions;
 }
 
+const SYNCED_IDS_KEY = 'diploma_synced_session_ids';
+let isSyncInProgress = false;
+
+function getSyncedIds() {
+  try {
+    const raw = localStorage.getItem(SYNCED_IDS_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function recordSyncedId(id) {
+  try {
+    const set = getSyncedIds();
+    set.add(id);
+    localStorage.setItem(SYNCED_IDS_KEY, JSON.stringify(Array.from(set).slice(-500)));
+  } catch {}
+}
+
 /**
  * Automatically sync un-uploaded local sessions to Cloud Firestore when database is active
  */
 export async function syncLocalSessionsToCloud() {
-  const local = getLocalSessions();
-  if (!local || local.length === 0) return 0;
+  if (isSyncInProgress) return 0;
+  isSyncInProgress = true;
 
-  let syncedCount = 0;
-  for (const s of local) {
-    if (!s.firebaseSynced && !s.firebaseId) {
-      try {
-        const docRef = await addDoc(collection(db, 'leaderboard_sessions'), {
-          studentId: s.studentId || getOrCreateStudentId(),
-          studentName: s.studentName,
-          college: s.college || 'Polytechnic Student',
-          examTitle: s.examTitle,
-          examType: s.examType,
-          totalQuestions: s.totalQuestions,
-          correctCount: s.correctCount || 0,
-          wrongCount: s.wrongCount || 0,
-          unattemptedCount: s.unattemptedCount || 0,
-          maxMarks: s.maxMarks,
-          marksObtained: s.marksObtained,
-          markPerQuestion: s.markPerQuestion || 1.0,
-          percentage: s.percentage,
-          accuracy: s.accuracy,
-          timestamp: s.timestamp
-        });
-        s.firebaseSynced = true;
-        s.firebaseId = docRef.id;
-        syncedCount++;
-      } catch (err) {
-        break; // Stop if Firestore rejects or API disabled
+  try {
+    const local = getLocalSessions();
+    if (!local || local.length === 0) return 0;
+
+    const syncedSet = getSyncedIds();
+    let syncedCount = 0;
+
+    for (const s of local) {
+      const sessionId = s.id || s.timestamp;
+      if (!s.firebaseSynced && !s.firebaseId && !syncedSet.has(sessionId)) {
+        try {
+          const docRef = await addDoc(collection(db, 'leaderboard_sessions'), {
+            studentId: s.studentId || getOrCreateStudentId(),
+            studentName: s.studentName,
+            college: s.college || 'Polytechnic Student',
+            examTitle: s.examTitle,
+            examType: s.examType,
+            totalQuestions: s.totalQuestions,
+            correctCount: s.correctCount || 0,
+            wrongCount: s.wrongCount || 0,
+            unattemptedCount: s.unattemptedCount || 0,
+            maxMarks: s.maxMarks,
+            marksObtained: s.marksObtained,
+            markPerQuestion: s.markPerQuestion || 1.0,
+            percentage: s.percentage,
+            accuracy: s.accuracy,
+            timestamp: s.timestamp
+          });
+          s.firebaseSynced = true;
+          s.firebaseId = docRef.id;
+          recordSyncedId(sessionId);
+          syncedCount++;
+        } catch (err) {
+          break; // Stop if Firestore rejects or API disabled
+        }
       }
     }
-  }
 
-  if (syncedCount > 0) {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(local));
-    } catch {}
+    if (syncedCount > 0) {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(local));
+      } catch {}
+    }
+    return syncedCount;
+  } finally {
+    isSyncInProgress = false;
   }
-  return syncedCount;
 }
 
 /**
