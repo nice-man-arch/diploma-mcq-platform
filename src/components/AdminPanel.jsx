@@ -19,7 +19,8 @@ import {
   CheckCircle2,
   XCircle,
   Eye,
-  LogOut
+  LogOut,
+  Globe
 } from 'lucide-react';
 import { 
   getAllStudentSessions, 
@@ -131,10 +132,10 @@ export default function AdminPanel({ onNavigateHome }) {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = (s.studentName || '').toLowerCase().includes(q);
-        const matchId = (s.studentId || '').toLowerCase().includes(q);
-        const matchCollege = (s.college || '').toLowerCase().includes(q);
+        const matchIp = (s.location?.ip || '').toLowerCase().includes(q);
         const matchCity = (s.location?.city || '').toLowerCase().includes(q);
-        if (!matchName && !matchId && !matchCollege && !matchCity) return false;
+        const matchId = (s.studentId || '').toLowerCase().includes(q);
+        if (!matchName && !matchIp && !matchCity && !matchId) return false;
       }
 
       // Exam filter
@@ -168,7 +169,7 @@ export default function AdminPanel({ onNavigateHome }) {
               Examiner & Admin Portal
             </h2>
             <p className="text-sm text-zinc-600 dark:text-[#9B9A97] mt-1.5 leading-relaxed">
-              Restricted area to monitor student names, geographic test origins, and scorecards.
+              Restricted area to monitor student names, unmasked IP addresses, and examination scores.
             </p>
           </div>
 
@@ -220,13 +221,13 @@ export default function AdminPanel({ onNavigateHome }) {
           <div>
             <div className="flex items-center gap-2 text-xs sm:text-sm font-mono font-bold text-emerald-700 dark:text-[#85B59A]">
               <ShieldCheck className="h-4 w-4" />
-              <span>ADMINISTRATOR & EXAMINER CONSOLE</span>
+              <span>ADMINISTRATOR & EXAMINER AUDIT</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-zinc-900 dark:text-white tracking-tight mt-1">
-              Student Submissions & Test Locations
+              Candidate IP Addresses & Test Records
             </h1>
             <p className="text-sm text-zinc-600 dark:text-[#9B9A97] mt-1">
-              Audit examinee identity, precise geographic test location, and scores in real time.
+              Audit examinee identity, raw IP addresses, and exam performance in real time.
             </p>
           </div>
 
@@ -300,7 +301,7 @@ export default function AdminPanel({ onNavigateHome }) {
 
         <div className="rounded-md border border-zinc-800 dark:border-white/50 bg-white dark:bg-[#202020] p-5">
           <div className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-[#9B9A97] flex items-center gap-1.5">
-            <Award className="h-4 w-4 text-amber-600 dark:text-[#D1B280]" />
+            <Award className="h-4 w-4 text-amber-600 dark:text-[#D18E84]" />
             Average Marks %
           </div>
           <div className="mt-2 text-3xl sm:text-4xl font-mono font-extrabold text-zinc-900 dark:text-white">
@@ -310,35 +311,14 @@ export default function AdminPanel({ onNavigateHome }) {
 
         <div className="rounded-md border border-zinc-800 dark:border-white/50 bg-white dark:bg-[#202020] p-5">
           <div className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-[#9B9A97] flex items-center gap-1.5">
-            <MapPin className="h-4 w-4 text-rose-600 dark:text-[#D18E84]" />
-            Cities Represented
+            <Globe className="h-4 w-4 text-sky-600 dark:text-[#8FAFC4]" />
+            Unique IP Locations
           </div>
-          <div className="mt-2 text-3xl sm:text-4xl font-mono font-extrabold text-rose-700 dark:text-[#D18E84]">
+          <div className="mt-2 text-3xl sm:text-4xl font-mono font-extrabold text-sky-700 dark:text-[#8FAFC4]">
             {metrics.uniqueCities}
           </div>
         </div>
       </div>
-
-      {/* Geographic Breakdown Tag Cloud */}
-      {metrics.cityCounts && Object.keys(metrics.cityCounts).length > 0 && (
-        <div className="rounded-md border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#191919] p-4 sm:p-5 space-y-2.5">
-          <div className="text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-[#9B9A97] flex items-center gap-1.5">
-            <MapPin className="h-3.5 w-3.5 text-rose-600 dark:text-[#D18E84]" />
-            Geographic Location Distribution
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {Object.entries(metrics.cityCounts).map(([city, count]) => (
-              <span
-                key={city}
-                className="inline-flex items-center gap-1.5 rounded-sm border border-zinc-800 dark:border-white/45 bg-white dark:bg-[#202020] px-2.5 py-1 text-xs font-medium text-zinc-800 dark:text-[#E3E3E3]"
-              >
-                <span>📍 {city}</span>
-                <span className="font-mono font-bold text-zinc-500 dark:text-[#9B9A97]">({count})</span>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Filter and Search Controls */}
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
@@ -346,7 +326,7 @@ export default function AdminPanel({ onNavigateHome }) {
           <Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500 dark:text-[#9B9A97]" />
           <input
             type="text"
-            placeholder="Search candidate name, roll no, college, or city..."
+            placeholder="Search candidate name, IP address, or city..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#202020] py-2.5 pl-9 pr-3 text-xs sm:text-sm text-zinc-900 dark:text-[#E3E3E3] focus:border-zinc-950 dark:focus:border-white focus:outline-hidden"
@@ -379,13 +359,14 @@ export default function AdminPanel({ onNavigateHome }) {
         </div>
       </div>
 
-      {/* Main Students Data Table */}
+      {/* Main Students Data Table - Direct Raw IP Address Column */}
       <div className="overflow-x-auto rounded-md border border-zinc-800 dark:border-white/50 bg-white dark:bg-[#202020] shadow-xs">
         <table className="w-full text-left text-xs sm:text-sm">
           <thead>
             <tr className="border-b border-zinc-800 dark:border-white/45 text-zinc-600 dark:text-[#9B9A97] font-bold bg-zinc-50 dark:bg-[#191919]">
               <th className="py-3 px-4 font-bold">Candidate</th>
-              <th className="py-3 px-4 font-bold">Test Location</th>
+              <th className="py-3 px-4 font-bold font-mono">IP Address</th>
+              <th className="py-3 px-4 font-bold">Location</th>
               <th className="py-3 px-4 font-bold">Exam</th>
               <th className="py-3 px-4 font-bold text-center">Score</th>
               <th className="py-3 px-4 font-bold text-center">Percentage</th>
@@ -396,8 +377,8 @@ export default function AdminPanel({ onNavigateHome }) {
           <tbody className="divide-y divide-zinc-800 dark:divide-white/45">
             {filteredSessions.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center text-sm text-zinc-500 dark:text-[#9B9A97]">
-                  No student test sessions found. When students take an exam, their name, location, and scores will appear here.
+                <td colSpan={8} className="py-12 text-center text-sm text-zinc-500 dark:text-[#9B9A97]">
+                  No student test sessions found. When students take an exam, their name, IP address, and scores will appear here.
                 </td>
               </tr>
             ) : (
@@ -414,20 +395,26 @@ export default function AdminPanel({ onNavigateHome }) {
                         {s.studentName || 'Anonymous Student'}
                       </div>
                       <div className="text-xs text-zinc-500 dark:text-[#9B9A97]">
-                        {s.studentId ? `PRN: ${s.studentId}` : ''} {s.college ? `• ${s.college}` : ''}
+                        {s.studentId ? `PRN: ${s.studentId}` : 'Enrolled Student'}
                       </div>
+                    </td>
+
+                    {/* Raw IP Address Display */}
+                    <td className="py-3.5 px-4">
+                      <span className="inline-block rounded-xs border border-zinc-800 dark:border-white/35 bg-zinc-100 dark:bg-[#191919] px-2.5 py-1 font-mono font-bold text-xs text-zinc-900 dark:text-white shadow-2xs">
+                        {loc.ip || '127.0.0.1'}
+                      </span>
                     </td>
 
                     {/* Location */}
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-[#E3E3E3]">
                         <MapPin className="h-3.5 w-3.5 text-rose-600 dark:text-[#D18E84] shrink-0" />
-                        <span>{loc.city || 'Unknown City'}</span>
+                        <span>{loc.city || 'Local Area'}</span>
                         {loc.region && <span className="text-zinc-500">, {loc.region}</span>}
                       </div>
-                      <div className="text-[11px] text-zinc-500 dark:text-[#6F6E6B] font-mono">
-                        {loc.source === 'gps' ? 'GPS High Accuracy' : 'Network Geo-IP'}
-                        {loc.latitude && loc.longitude ? ` • (${loc.latitude.toFixed(2)}°, ${loc.longitude.toFixed(2)}°)` : ''}
+                      <div className="text-[11px] text-zinc-500 dark:text-[#6F6E6B]">
+                        {loc.country || 'India'}
                       </div>
                     </td>
 

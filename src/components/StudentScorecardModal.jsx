@@ -10,7 +10,8 @@ import {
   Check, 
   AlertCircle,
   ExternalLink,
-  Printer
+  Printer,
+  Globe
 } from 'lucide-react';
 
 export default function StudentScorecardModal({ session, onClose }) {
@@ -50,24 +51,28 @@ export default function StudentScorecardModal({ session, onClose }) {
               <User className="h-3.5 w-3.5" />
               Candidate Profile
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div><strong className="text-zinc-900 dark:text-white">Name:</strong> {session.studentName}</div>
-              {session.studentId && <div><strong className="text-zinc-900 dark:text-white">Roll/PRN:</strong> {session.studentId}</div>}
-              {session.college && <div><strong className="text-zinc-900 dark:text-white">College:</strong> {session.college}</div>}
+              {session.studentId && <div><strong className="text-zinc-900 dark:text-white">PRN:</strong> {session.studentId}</div>}
               <div><strong className="text-zinc-900 dark:text-white">Date:</strong> {new Date(session.timestamp).toLocaleString()}</div>
             </div>
           </div>
 
-          {/* Test Location Info */}
+          {/* Raw IP & Location Info */}
           <div className="rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#191919] p-4 space-y-2">
             <div className="font-bold text-xs uppercase tracking-wider text-rose-600 dark:text-[#D18E84] flex items-center gap-1.5">
-              <MapPin className="h-3.5 w-3.5" />
-              Test Origin & Location
+              <Globe className="h-3.5 w-3.5" />
+              Client IP & Network Origin
             </div>
-            <div className="space-y-1">
-              <div><strong className="text-zinc-900 dark:text-white">City/Region:</strong> {loc.city || 'Unknown'}{loc.region ? `, ${loc.region}` : ''}</div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <strong className="text-zinc-900 dark:text-white">Client IP:</strong>
+                <span className="font-mono font-bold text-xs bg-zinc-200 dark:bg-[#252525] px-2 py-0.5 rounded-xs border border-zinc-800 dark:border-white/30 text-zinc-900 dark:text-white">
+                  {loc.ip || '127.0.0.1'}
+                </span>
+              </div>
+              <div><strong className="text-zinc-900 dark:text-white">City / Region:</strong> {loc.city || 'Local Area'}{loc.region ? `, ${loc.region}` : ''}</div>
               <div><strong className="text-zinc-900 dark:text-white">Country:</strong> {loc.country || 'India'}</div>
-              {loc.ip && <div><strong className="text-zinc-900 dark:text-white">IP Address:</strong> <span className="font-mono">{loc.ip}</span></div>}
               {loc.latitude && loc.longitude && (
                 <div className="pt-1 flex items-center justify-between">
                   <span className="font-mono text-xs text-zinc-500">

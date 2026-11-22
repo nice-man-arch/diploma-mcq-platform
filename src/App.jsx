@@ -12,6 +12,7 @@ import InstantPractice from './components/InstantPractice';
 import MistakeNotebook from './components/MistakeNotebook';
 import FirstBootModal from './components/FirstBootModal';
 import AdminPanel from './components/AdminPanel';
+import Leaderboard from './components/Leaderboard';
 
 import { selectRandomQuestions, evaluateExam } from './utils/quizEngine';
 import { 
@@ -405,6 +406,14 @@ export default function App() {
               onRemoveMistake={handleRemoveMistake}
               onClearAll={handleClearAllMistakes}
               onSwitchToReading={() => setCurrentView('reading')}
+            />
+          )}
+
+          {/* Student Leaderboard */}
+          {currentView === 'leaderboard' && (
+            <Leaderboard
+              currentStudentName={localStorage.getItem('diploma_student_name') || currentStudent?.name}
+              onLaunchExam={() => handleLaunchPreset('70_marks')}
             />
           )}
 

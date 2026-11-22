@@ -9,7 +9,8 @@ import {
   Clock, 
   Plus, 
   GraduationCap, 
-  PanelLeftClose
+  PanelLeftClose,
+  Trophy
 } from 'lucide-react';
 
 const UNITS = [
@@ -89,6 +90,25 @@ export default function Sidebar({
                 <FileText className="h-4 w-4" />
                 <span>Dashboard</span>
               </div>
+            </button>
+
+            {/* Public Student Leaderboard */}
+            <button
+              type="button"
+              onClick={() => onNavigate('leaderboard')}
+              className={`w-full flex items-center justify-between rounded-sm px-3 py-2 text-sm font-semibold transition-colors cursor-pointer border ${
+                currentView === 'leaderboard'
+                  ? 'bg-zinc-100 text-zinc-900 border-zinc-900 dark:bg-[#282828] dark:text-white dark:border-white/60'
+                  : 'text-zinc-600 dark:text-[#9B9A97] border-transparent hover:bg-zinc-50 dark:hover:bg-[#262626] hover:text-zinc-900 dark:hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Trophy className="h-4 w-4 text-amber-500" />
+                <span>Leaderboard</span>
+              </div>
+              <span className="rounded-xs border border-amber-600/40 bg-amber-50 dark:bg-[#282117] px-1.5 py-0.2 text-[10px] font-mono font-bold text-amber-700 dark:text-[#D1B280]">
+                RANKS
+              </span>
             </button>
 
             <button
