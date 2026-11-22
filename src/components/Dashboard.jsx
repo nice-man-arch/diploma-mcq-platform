@@ -222,7 +222,7 @@ export default function Dashboard({
                 </span>
               </div>
               <p className="text-sm text-zinc-600 dark:text-[#9B9A97]">
-                Current Leader: <strong className="text-zinc-900 dark:text-white">Aarav Sharma</strong> (298 Qs Solved, 94% Accuracy). Complete an exam to claim your rank!
+                Live rankings based on actual student exam submissions and questions solved. Complete an exam to register your rank!
               </p>
             </div>
           </div>

@@ -17,64 +17,6 @@ import {
 } from 'lucide-react';
 import { getAllStudentSessions } from '../utils/sessionService';
 
-// Default peer scholars to populate the competitive ranking board
-const INITIAL_PEER_SCHOLARS = [
-  {
-    name: "Aarav Sharma",
-    questionsSolved: 298,
-    marksObtained: 278.5,
-    accuracy: 94,
-    examsCount: 4,
-    college: "Govt Polytechnic Pune",
-    tier: "Rank 1 • Master Scholar"
-  },
-  {
-    name: "Priya Nair",
-    questionsSolved: 260,
-    marksObtained: 236.0,
-    accuracy: 89,
-    examsCount: 3,
-    college: "Karnataka Govt Polytechnic",
-    tier: "Rank 2 • Grand Scholar"
-  },
-  {
-    name: "Rohan Deshmukh",
-    questionsSolved: 215,
-    marksObtained: 184.0,
-    accuracy: 82,
-    examsCount: 3,
-    college: "VJTI Polytechnic Mumbai",
-    tier: "Rank 3 • Elite Scholar"
-  },
-  {
-    name: "Sneha Kulkarni",
-    questionsSolved: 175,
-    marksObtained: 158.0,
-    accuracy: 88,
-    examsCount: 2,
-    college: "Govt Polytechnic Kolhapur",
-    tier: "Senior Scholar"
-  },
-  {
-    name: "Aditya Joshi",
-    questionsSolved: 140,
-    marksObtained: 122.5,
-    accuracy: 85,
-    examsCount: 2,
-    college: "Government Polytechnic Nagpur",
-    tier: "Senior Scholar"
-  },
-  {
-    name: "Kavya Reddy",
-    questionsSolved: 95,
-    marksObtained: 84.0,
-    accuracy: 88,
-    examsCount: 1,
-    college: "Govt Polytechnic Hyderabad",
-    tier: "Rising Scholar"
-  }
-];
-
 export default function Leaderboard({ 
   currentStudentName, 
   onLaunchExam, 
@@ -93,27 +35,12 @@ export default function Leaderboard({
     });
   }, []);
 
-  // Compute live ranking table combining peer scholars and actual student sessions
+  // Compute live ranking table strictly from actual student exam sessions
   const rankings = useMemo(() => {
     const studentStats = new Map();
     const currKey = currentStudentName ? currentStudentName.toLowerCase().trim() : '';
 
-    // 1. Seed with peer scholars
-    INITIAL_PEER_SCHOLARS.forEach(p => {
-      const pKey = p.name.toLowerCase().trim();
-      const isCurr = !isOptedOut && currKey && pKey === currKey;
-      studentStats.set(pKey, {
-        name: p.name,
-        questionsSolved: p.questionsSolved,
-        marksObtained: p.marksObtained,
-        accuracy: p.accuracy,
-        examsCount: p.examsCount,
-        college: p.college,
-        isCurrentUser: isCurr
-      });
-    });
-
-    // 2. Aggregate from recorded student sessions
+    // Aggregate strictly from recorded real student sessions (No fake dummy data)
     sessions.forEach(s => {
       const name = s.studentName ? s.studentName.trim() : 'Anonymous';
       const key = name.toLowerCase();
@@ -129,7 +56,7 @@ export default function Leaderboard({
         marksObtained: 0,
         accuracy: 0,
         examsCount: 0,
-        college: s.college || 'Polytechnic Student',
+        college: s.college || (s.location?.city ? `${s.location.city} Polytechnic` : 'Polytechnic Student'),
         isCurrentUser: !isOptedOut && currKey && key === currKey
       };
 
@@ -137,13 +64,13 @@ export default function Leaderboard({
       existing.marksObtained += (s.marksObtained || 0);
       existing.examsCount += 1;
       existing.accuracy = existing.examsCount > 0 
-        ? Math.round(((existing.accuracy * (existing.examsCount - 1)) + (s.accuracy || 80)) / existing.examsCount)
-        : (s.accuracy || 80);
+        ? Math.round(((existing.accuracy * (existing.examsCount - 1)) + (s.accuracy || 0)) / existing.examsCount)
+        : (s.accuracy || 0);
 
       studentStats.set(key, existing);
     });
 
-    // 3. Ensure current student is listed if not opted out
+    // If current student is registered and has not taken any exams yet, show on board with 0 Qs if not opted out
     if (!isOptedOut && currKey && !studentStats.has(currKey)) {
       studentStats.set(currKey, {
         name: currentStudentName,
@@ -156,12 +83,12 @@ export default function Leaderboard({
       });
     }
 
-    // If opted out, ensure current student is completely removed if seed matched
+    // If opted out, ensure current student is completely removed
     if (isOptedOut && currKey) {
       studentStats.delete(currKey);
     }
 
-    // 4. Sort by Questions Solved desc, then Marks Obtained desc
+    // Sort by Questions Solved desc, then Marks Obtained desc
     const sorted = Array.from(studentStats.values()).sort((a, b) => {
       if (b.questionsSolved !== a.questionsSolved) {
         return b.questionsSolved - a.questionsSolved;
@@ -310,147 +237,183 @@ export default function Leaderboard({
         </div>
       )}
 
-      {/* Top 3 Podium Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {topThree.map((scholar, idx) => {
-          const medals = [
-            { label: "1st Place", badge: "🥇 Rank #1", bg: "border-amber-500 bg-amber-50/40 dark:bg-[#262017]" },
-            { label: "2nd Place", badge: "🥈 Rank #2", bg: "border-zinc-400 bg-zinc-50/40 dark:bg-[#202020]" },
-            { label: "3rd Place", badge: "🥉 Rank #3", bg: "border-amber-700/60 bg-amber-50/20 dark:bg-[#221B17]" },
-          ];
-          const m = medals[idx] || medals[0];
+      {/* Top Podium Cards (Only rendered if scholars have completed tests) */}
+      {topThree.length > 0 && topThree.some(s => s.questionsSolved > 0) && (
+        <div className={`grid grid-cols-1 ${
+          topThree.filter(s => s.questionsSolved > 0).length === 1 
+            ? 'md:grid-cols-1 max-w-md' 
+            : topThree.filter(s => s.questionsSolved > 0).length === 2 
+            ? 'md:grid-cols-2 max-w-2xl' 
+            : 'md:grid-cols-3'
+        } gap-4`}>
+          {topThree.filter(s => s.questionsSolved > 0).map((scholar, idx) => {
+            const medals = [
+              { label: "1st Place", badge: "🥇 Rank #1", bg: "border-amber-500 bg-amber-50/40 dark:bg-[#262017]" },
+              { label: "2nd Place", badge: "🥈 Rank #2", bg: "border-zinc-400 bg-zinc-50/40 dark:bg-[#202020]" },
+              { label: "3rd Place", badge: "🥉 Rank #3", bg: "border-amber-700/60 bg-amber-50/20 dark:bg-[#221B17]" },
+            ];
+            const m = medals[idx] || medals[0];
 
-          return (
-            <div
-              key={scholar.name}
-              className={`rounded-md border-2 ${m.bg} p-5 space-y-3 relative overflow-hidden shadow-xs`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-mono font-extrabold text-xs tracking-wider uppercase text-zinc-700 dark:text-[#D1B280]">
-                  {m.badge}
-                </span>
-                <span className="rounded-xs border border-zinc-800 dark:border-white/30 px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-600 dark:text-[#9B9A97]">
-                  {scholar.accuracy}% ACC
-                </span>
-              </div>
+            return (
+              <div
+                key={scholar.name}
+                className={`rounded-md border-2 ${m.bg} p-5 space-y-3 relative overflow-hidden shadow-xs`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono font-extrabold text-xs tracking-wider uppercase text-zinc-700 dark:text-[#D1B280]">
+                    {m.badge}
+                  </span>
+                  <span className="rounded-xs border border-zinc-800 dark:border-white/30 px-1.5 py-0.5 text-[10px] font-mono font-bold text-zinc-600 dark:text-[#9B9A97]">
+                    {scholar.accuracy}% ACC
+                  </span>
+                </div>
 
-              <div>
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-white truncate">
-                  {scholar.name} {scholar.isCurrentUser ? '(You)' : ''}
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-[#9B9A97] truncate mt-0.5">
-                  {scholar.college}
-                </p>
-              </div>
-
-              <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs">
                 <div>
-                  <div className="text-zinc-500">Solved</div>
-                  <div className="font-mono font-bold text-base text-zinc-900 dark:text-white">
-                    {scholar.questionsSolved} Qs
-                  </div>
+                  <h3 className="text-lg font-bold text-zinc-900 dark:text-white truncate">
+                    {scholar.name} {scholar.isCurrentUser ? '(You)' : ''}
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-[#9B9A97] truncate mt-0.5">
+                    {scholar.college}
+                  </p>
                 </div>
-                <div className="text-right">
-                  <div className="text-zinc-500">Total Score</div>
-                  <div className="font-mono font-bold text-base text-amber-600 dark:text-[#D1B280]">
-                    {scholar.marksObtained} pts
+
+                <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs">
+                  <div>
+                    <div className="text-zinc-500">Solved</div>
+                    <div className="font-mono font-bold text-base text-zinc-900 dark:text-white">
+                      {scholar.questionsSolved} Qs
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-zinc-500">Total Score</div>
+                    <div className="font-mono font-bold text-base text-amber-600 dark:text-[#D1B280]">
+                      {scholar.marksObtained} pts
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Search Filter */}
-      <div className="relative">
-        <Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500 dark:text-[#9B9A97]" />
-        <input
-          type="text"
-          placeholder="Search scholar by student name or institution..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#202020] py-2.5 pl-9 pr-3 text-xs sm:text-sm text-zinc-900 dark:text-[#E3E3E3] focus:border-zinc-950 dark:focus:border-white focus:outline-hidden"
-        />
-      </div>
+      {filteredRankings.length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500 dark:text-[#9B9A97]" />
+          <input
+            type="text"
+            placeholder="Search scholar by student name or institution..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-sm border border-zinc-800 dark:border-white/45 bg-zinc-50 dark:bg-[#202020] py-2.5 pl-9 pr-3 text-xs sm:text-sm text-zinc-900 dark:text-[#E3E3E3] focus:border-zinc-950 dark:focus:border-white focus:outline-hidden"
+          />
+        </div>
+      )}
 
-      {/* Main Leaderboard Table */}
-      <div className="overflow-x-auto rounded-md border border-zinc-800 dark:border-white/50 bg-white dark:bg-[#202020] shadow-xs">
-        <table className="w-full text-left text-xs sm:text-sm">
-          <thead>
-            <tr className="border-b border-zinc-800 dark:border-white/45 text-zinc-600 dark:text-[#9B9A97] font-bold bg-zinc-50 dark:bg-[#191919]">
-              <th className="py-3 px-4 font-bold text-center w-16">Rank</th>
-              <th className="py-3 px-4 font-bold">Candidate Scholar</th>
-              <th className="py-3 px-4 font-bold text-center">Questions Solved</th>
-              <th className="py-3 px-4 font-bold text-center">Total Marks</th>
-              <th className="py-3 px-4 font-bold text-center">Accuracy</th>
-              <th className="py-3 px-4 font-bold text-right">Tests Taken</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-800 dark:divide-white/45">
-            {filteredRankings.map((student) => {
-              const isFirst = student.rank === 1;
-              const isSecond = student.rank === 2;
-              const isThird = student.rank === 3;
+      {/* Main Leaderboard Table or Empty State */}
+      {filteredRankings.length === 0 ? (
+        <div className="rounded-md border border-zinc-800 dark:border-white/45 bg-white dark:bg-[#202020] p-12 text-center space-y-4">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-sm bg-amber-500/10 dark:bg-[#362D1F] border border-amber-600/30 text-amber-600 dark:text-[#D1B280]">
+            <Trophy className="h-7 w-7" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
+              No Exam Submissions Yet
+            </h3>
+            <p className="text-sm text-zinc-600 dark:text-[#9B9A97] max-w-md mx-auto">
+              Complete your first 70 Marks Exam or Instant Practice drill to register your score and claim Rank #1!
+            </p>
+          </div>
+          {onLaunchExam && (
+            <button
+              type="button"
+              onClick={onLaunchExam}
+              className="rounded-sm border border-zinc-900 dark:border-white/60 bg-zinc-900 dark:bg-white px-5 py-2 text-sm font-bold text-white dark:text-[#191919] hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors inline-flex items-center gap-2 cursor-pointer"
+            >
+              <Zap className="h-4 w-4 text-amber-400 fill-current" />
+              <span>Start Your First Exam</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-md border border-zinc-800 dark:border-white/50 bg-white dark:bg-[#202020] shadow-xs">
+          <table className="w-full text-left text-xs sm:text-sm">
+            <thead>
+              <tr className="border-b border-zinc-800 dark:border-white/45 text-zinc-600 dark:text-[#9B9A97] font-bold bg-zinc-50 dark:bg-[#191919]">
+                <th className="py-3 px-4 font-bold text-center w-16">Rank</th>
+                <th className="py-3 px-4 font-bold">Candidate Scholar</th>
+                <th className="py-3 px-4 font-bold text-center">Questions Solved</th>
+                <th className="py-3 px-4 font-bold text-center">Total Marks</th>
+                <th className="py-3 px-4 font-bold text-center">Accuracy</th>
+                <th className="py-3 px-4 font-bold text-right">Tests Taken</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800 dark:divide-white/45">
+              {filteredRankings.map((student) => {
+                const isFirst = student.rank === 1;
+                const isSecond = student.rank === 2;
+                const isThird = student.rank === 3;
 
-              return (
-                <tr
-                  key={student.name}
-                  className={`transition-colors ${
-                    student.isCurrentUser
-                      ? 'bg-amber-100/50 dark:bg-[#2B2317] font-semibold'
-                      : 'hover:bg-zinc-50 dark:hover:bg-[#252525]'
-                  }`}
-                >
-                  {/* Rank */}
-                  <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base">
-                    {isFirst ? '🥇 #1' : isSecond ? '🥈 #2' : isThird ? '🥉 #3' : `#${student.rank}`}
-                  </td>
+                return (
+                  <tr
+                    key={student.name}
+                    className={`transition-colors ${
+                      student.isCurrentUser
+                        ? 'bg-amber-100/50 dark:bg-[#2B2317] font-semibold'
+                        : 'hover:bg-zinc-50 dark:hover:bg-[#252525]'
+                    }`}
+                  >
+                    {/* Rank */}
+                    <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base">
+                      {isFirst ? '🥇 #1' : isSecond ? '🥈 #2' : isThird ? '🥉 #3' : `#${student.rank}`}
+                    </td>
 
-                  {/* Candidate */}
-                  <td className="py-3.5 px-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-zinc-900 dark:text-white text-sm sm:text-base">
-                        {student.name}
-                      </span>
-                      {student.isCurrentUser && (
-                        <span className="rounded-xs border border-amber-700 bg-amber-100 dark:bg-[#362D1F] px-1.5 py-0.2 text-[10px] font-bold text-amber-800 dark:text-[#D1B280]">
-                          YOU
+                    {/* Candidate */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-zinc-900 dark:text-white text-sm sm:text-base">
+                          {student.name}
                         </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-zinc-500 dark:text-[#9B9A97]">
-                      {student.college}
-                    </div>
-                  </td>
+                        {student.isCurrentUser && (
+                          <span className="rounded-xs border border-amber-700 bg-amber-100 dark:bg-[#362D1F] px-1.5 py-0.2 text-[10px] font-bold text-amber-800 dark:text-[#D1B280]">
+                            YOU
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-zinc-500 dark:text-[#9B9A97]">
+                        {student.college}
+                      </div>
+                    </td>
 
-                  {/* Questions Solved */}
-                  <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-zinc-900 dark:text-white">
-                    {student.questionsSolved} Qs
-                  </td>
+                    {/* Questions Solved */}
+                    <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-zinc-900 dark:text-white">
+                      {student.questionsSolved} Qs
+                    </td>
 
-                  {/* Total Marks */}
-                  <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-amber-600 dark:text-[#D1B280]">
-                    {student.marksObtained}
-                  </td>
+                    {/* Total Marks */}
+                    <td className="py-3.5 px-4 text-center font-mono font-bold text-sm sm:text-base text-amber-600 dark:text-[#D1B280]">
+                      {student.marksObtained}
+                    </td>
 
-                  {/* Accuracy */}
-                  <td className="py-3.5 px-4 text-center">
-                    <span className="rounded-sm border border-zinc-800 dark:border-white/30 bg-zinc-100 dark:bg-[#191919] px-2 py-0.5 text-xs font-mono font-bold">
-                      {student.accuracy}%
-                    </span>
-                  </td>
+                    {/* Accuracy */}
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="rounded-sm border border-zinc-800 dark:border-white/30 bg-zinc-100 dark:bg-[#191919] px-2 py-0.5 text-xs font-mono font-bold">
+                        {student.accuracy}%
+                      </span>
+                    </td>
 
-                  {/* Tests Taken */}
-                  <td className="py-3.5 px-4 text-right font-mono text-zinc-600 dark:text-[#9B9A97]">
-                    {student.examsCount} {student.examsCount === 1 ? 'Exam' : 'Exams'}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    {/* Tests Taken */}
+                    <td className="py-3.5 px-4 text-right font-mono text-zinc-600 dark:text-[#9B9A97]">
+                      {student.examsCount} {student.examsCount === 1 ? 'Exam' : 'Exams'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
