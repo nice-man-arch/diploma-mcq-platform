@@ -1,6 +1,6 @@
 // src/utils/sessionService.js
 import { db } from './firebase';
-import { collection, addDoc, getDocs, query, orderBy, limit, doc, updateDoc, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, limit, doc, updateDoc, setDoc, where } from 'firebase/firestore';
 
 const LOCAL_STORAGE_KEY = 'diploma_student_sessions';
 const STUDENT_PROFILE_KEY = 'diploma_current_student_profile';
@@ -100,6 +100,14 @@ export async function updateStudentName(newName) {
 
   // 4. Update in Firebase Firestore in the background
   try {
+    // a) Upsert student profile document for instant cross-device lookup
+    setDoc(doc(db, 'student_profiles', currentId), {
+      studentId: currentId,
+      studentName: trimmed,
+      updatedAt: new Date().toISOString()
+    }, { merge: true }).catch(() => {});
+
+    // b) Update all existing sessions for this student
     const q = query(
       collection(db, 'leaderboard_sessions'),
       where('studentId', '==', currentId)
@@ -219,6 +227,14 @@ export async function recordStudentSession(sessionData) {
 
     const docRef = await Promise.race([syncPromise, timeoutPromise]);
     sessionRecord.firebaseId = docRef.id;
+
+    // Also upsert profile
+    setDoc(doc(db, 'student_profiles', sessionRecord.studentId), {
+      studentId: sessionRecord.studentId,
+      studentName: sessionRecord.studentName,
+      college: sessionRecord.college,
+      lastActive: sessionRecord.timestamp
+    }, { merge: true }).catch(() => {});
   } catch (firebaseErr) {
     console.warn('Firebase cloud sync notice (stored locally):', firebaseErr.message);
   }
@@ -412,14 +428,20 @@ export async function syncLocalSessionsToCloud() {
 
     const syncedSet = getSyncedIds();
     let syncedCount = 0;
+    const myId = getOrCreateStudentId();
+    const currentName = localStorage.getItem('diploma_student_name');
 
     for (const s of local) {
       const sessionId = s.id || s.timestamp;
       if (!s.firebaseSynced && !s.firebaseId && !syncedSet.has(sessionId)) {
         try {
+          const resolvedName = (s.studentId === myId && currentName && currentName.trim())
+            ? currentName.trim()
+            : (s.studentName || 'Scholar');
+
           const docRef = await addDoc(collection(db, 'leaderboard_sessions'), {
-            studentId: s.studentId || getOrCreateStudentId(),
-            studentName: s.studentName,
+            studentId: s.studentId || myId,
+            studentName: resolvedName,
             college: s.college || 'Polytechnic Student',
             examTitle: s.examTitle,
             examType: s.examType,

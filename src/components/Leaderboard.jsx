@@ -34,6 +34,7 @@ export default function Leaderboard({
   onOpenSettings 
 }) {
   const [sessions, setSessions] = useState(() => getLocalSessions());
+  const [studentProfiles, setStudentProfiles] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [examTab, setExamTab] = useState('all'); // 'all' | '70_marks' | '140_drill'
   const [cloudSyncStatus, setCloudSyncStatus] = useState('checking'); // 'checking' | 'connected' | 'pending_setup'
@@ -58,8 +59,29 @@ export default function Leaderboard({
       setCloudSyncStatus(prev => prev === 'checking' ? 'pending_setup' : prev);
     }, 2500);
 
-    // 4. Attach Firebase Firestore real-time subscription
-    let unsubscribe = () => {};
+    // 4. Attach Firebase Firestore real-time subscriptions
+    let unsubscribeSessions = () => {};
+    let unsubscribeProfiles = () => {};
+
+    try {
+      unsubscribeProfiles = onSnapshot(
+        collection(db, 'student_profiles'),
+        (snapshot) => {
+          const pMap = {};
+          snapshot.docs.forEach(docSnap => {
+            const p = docSnap.data();
+            if (p.studentId && p.studentName) {
+              pMap[p.studentId] = p.studentName;
+            }
+          });
+          setStudentProfiles(pMap);
+        },
+        (err) => {
+          console.warn('Firestore profiles subscription notice:', err.message);
+        }
+      );
+    } catch {}
+
     try {
       const q = query(
         collection(db, 'leaderboard_sessions'),
@@ -67,7 +89,7 @@ export default function Leaderboard({
         limit(150)
       );
 
-      unsubscribe = onSnapshot(
+      unsubscribeSessions = onSnapshot(
         q,
         (snapshot) => {
           clearTimeout(probeTimer);
@@ -117,7 +139,10 @@ export default function Leaderboard({
       window.removeEventListener('diploma_student_name_updated', handleLocalUpdate);
       window.removeEventListener('storage', handleLocalUpdate);
       try {
-        unsubscribe();
+        unsubscribeSessions();
+      } catch {}
+      try {
+        unsubscribeProfiles();
       } catch {}
     };
   }, []);
@@ -149,14 +174,16 @@ export default function Leaderboard({
     });
 
     deduplicatedSessions.forEach(s => {
-      const name = s.studentName ? s.studentName.trim() : 'Scholar';
+      // 1. Resolve student name: check studentProfiles map first, then session name
+      const profileName = (s.studentId && studentProfiles[s.studentId]) ? studentProfiles[s.studentId].trim() : null;
+      const baseName = profileName || (s.studentName ? s.studentName.trim() : 'Scholar');
+
       // Identify each student by studentId to allow multiple people to share the exact same name
-      const studentKey = s.studentId || (s.id ? `sess_${s.id}` : `sess_${name}_${s.timestamp}`);
+      const studentKey = s.studentId || (s.id ? `sess_${s.id}` : `sess_${baseName}_${s.timestamp}`);
       
       const isCurrentUser = !isOptedOut && (
         (currId && s.studentId && s.studentId === currId) ||
-        (!s.studentId && currNameKey && name.toLowerCase() === currNameKey) ||
-        (currNameKey && name.toLowerCase() === currNameKey)
+        (!s.studentId && currNameKey && baseName.toLowerCase() === currNameKey)
       );
 
       // If current student has opted out, exclude their sessions from public leaderboard
@@ -166,7 +193,7 @@ export default function Leaderboard({
 
       const resolvedDisplayName = (isCurrentUser && currentStudentName && currentStudentName.trim())
         ? currentStudentName.trim()
-        : name;
+        : baseName;
 
       const existing = studentStats.get(studentKey) || {
         id: studentKey,
@@ -202,6 +229,8 @@ export default function Leaderboard({
         if (currentStudentName && currentStudentName.trim()) {
           existing.name = currentStudentName.trim();
         }
+      } else if (profileName) {
+        existing.name = profileName;
       }
 
       const totalQ = (!isNaN(Number(s.totalQuestions)) && Number(s.totalQuestions) > 0) ? Number(s.totalQuestions) : 70;
@@ -299,7 +328,7 @@ export default function Leaderboard({
     });
 
     return Array.from(studentStats.values());
-  }, [sessions, currentStudentName, resolvedStudentId, isOptedOut]);
+  }, [sessions, currentStudentName, resolvedStudentId, isOptedOut, studentProfiles]);
 
   // Filter and sort rankings according to selected exam tab
   const tabRankings = useMemo(() => {

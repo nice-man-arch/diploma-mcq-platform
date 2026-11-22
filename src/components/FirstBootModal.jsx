@@ -1,7 +1,7 @@
 // src/components/FirstBootModal.jsx
 import React, { useState } from 'react';
 import { User, Trophy, ArrowRight, Award } from 'lucide-react';
-import { saveStudentProfile, getOrCreateStudentId } from '../utils/sessionService';
+import { saveStudentProfile, getOrCreateStudentId, updateStudentName } from '../utils/sessionService';
 
 export default function FirstBootModal({ isOpen, onComplete }) {
   const [name, setName] = useState('');
@@ -29,6 +29,9 @@ export default function FirstBootModal({ isOpen, onComplete }) {
     saveStudentProfile(profile);
     localStorage.setItem('diploma_student_name', name.trim());
     localStorage.setItem('diploma_student_id', studentId);
+    try {
+      await updateStudentName(name.trim());
+    } catch {}
     setIsSubmitting(false);
     onComplete(profile);
   };
