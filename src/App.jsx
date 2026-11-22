@@ -68,11 +68,21 @@ export default function App() {
 
   // Listen for obscure URL navigation (e.g. /anskey or #/anskey)
   useEffect(() => {
+    // Clear residual storage on load so #anskey can NEVER bypass security
+    sessionStorage.removeItem('diploma_admin_auth');
+    localStorage.removeItem('diploma_admin_auth');
+
     const handleUrlChange = () => {
       if (isSecretAdminRoute()) {
         setCurrentView('admin');
+        if (window.location.hash) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
       }
     };
+    if (isSecretAdminRoute()) {
+      handleUrlChange();
+    }
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
     return () => {

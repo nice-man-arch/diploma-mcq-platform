@@ -47,15 +47,6 @@ export default function Dashboard({
     const val = e.target.value;
     setCommandQuery(val);
     if (commandStatus) setCommandStatus('');
-
-    // If password /test01 (or test01) is entered, auto-redirect after short grace so user sees what they typed
-    const cleaned = val.trim().toLowerCase();
-    if (cleaned === '/test01' || cleaned === 'test01') {
-      const timer = setTimeout(() => {
-        triggerAdminUnlock();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
   };
 
   const handleCommandSubmit = (e) => {

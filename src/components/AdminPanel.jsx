@@ -40,9 +40,14 @@ export default function AdminPanel({
   mistakeCount,
   history
 }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return sessionStorage.getItem('diploma_admin_auth') === 'true';
-  });
+  // Always start locked (false) in memory. No persistent token so putting #anskey can NEVER bypass security.
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    // Clear any residual session auth keys
+    sessionStorage.removeItem('diploma_admin_auth');
+    localStorage.removeItem('diploma_admin_auth');
+  }, []);
 
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);

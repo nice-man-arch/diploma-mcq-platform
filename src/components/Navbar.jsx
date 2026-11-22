@@ -18,7 +18,6 @@ export default function Navbar({
   theme = 'dark',
   onToggleTheme
 }) {
-  const isAdminAuthenticated = sessionStorage.getItem('diploma_admin_auth') === 'true';
   const viewTitles = {
     home: 'Dashboard',
     exam: activeExamTitle || 'Exam Session',
@@ -27,7 +26,7 @@ export default function Navbar({
     instant: 'Instant Step-by-Step Practice',
     mistakes: 'Mistake Notebook',
     leaderboard: 'Scholars Leaderboard',
-    admin: isAdminAuthenticated ? 'Admin Board' : 'Dashboard'
+    admin: 'Dashboard'
   };
 
   return (
