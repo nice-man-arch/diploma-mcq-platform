@@ -101,6 +101,7 @@ function adminApiPlugin() {
 }
 
 export default defineConfig({
+  base: './',
   plugins: [react(), adminApiPlugin()],
   server: {
     port: 5173,
